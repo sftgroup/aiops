@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const OAuth = require('oauth-1.0a');
 
 const app = express();
 const PORT = process.env.PORT || 5289;
@@ -27,6 +29,8 @@ const CONFIG = {
   aitoearnKey: process.env.AITO_EARN_KEY || '',
   aitoearnInternalToken: process.env.AITO_EARN_INTERNAL_TOKEN || 'change-this-secret-token',
   jwtSecret: process.env.JWT_SECRET || 'aiops-jwt-secret-change-in-production',
+  twitterConsumerKey: process.env.TWITTER_CONSUMER_KEY || 'muQw5zLuku0Y6mcY8AGV2tAF5',
+  twitterConsumerSecret: process.env.TWITTER_CONSUMER_SECRET || 'QiuVrHzuu0CrIuOwoaq3gB4eqrn4XX9dHHQbanTevDt9LI4gFm',
 };
 
 // ─── DB (JSON file based, lightweight) ────────────────────
@@ -208,6 +212,142 @@ app.post('/api/aiops/publish', authMiddleware, async (req, res) => {
 app.get('/api/aiops/publishes', authMiddleware, (req, res) => {
   const publishes = loadDB('publishes').filter(p => p.userId === req.user.id);
   res.json(publishes.sort((a, b) => b.createdAt - a.createdAt));
+});
+
+// ─── Twitter OAuth 1.0a PIN Flow ───────────────────────────
+const twitterOAuth = new OAuth({
+  consumer: { key: CONFIG.twitterConsumerKey, secret: CONFIG.twitterConsumerSecret },
+  signature_method: 'HMAC-SHA1',
+  hash_function(base_string, key) {
+    return crypto.createHmac('sha1', key).update(base_string).digest('base64');
+  },
+});
+
+const TWITTER_API = 'https://api.x.com';
+
+// Temporary store for request tokens before PIN verification
+const requestTokenStore = {}; // key: oauth_token, value: { oauth_token_secret, userId }
+
+// POST /api/oauth/twitter/request-token - Get auth URL
+app.post('/api/oauth/twitter/request-token', authMiddleware, async (req, res) => {
+  try {
+    const requestData = { url: `${TWITTER_API}/oauth/request_token`, method: 'POST', data: { oauth_callback: 'oob' } };
+    const headers = twitterOAuth.toHeader(twitterOAuth.authorize(requestData));
+
+    const resp = await fetch(requestData.url, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ oauth_callback: 'oob' }),
+    });
+    const text = await resp.text();
+    const params = Object.fromEntries(new URLSearchParams(text));
+
+    if (!params.oauth_token) {
+      return res.status(500).json({ error: '获取Request Token失败', detail: text });
+    }
+
+    // Store temporarily
+    requestTokenStore[params.oauth_token] = {
+      oauth_token_secret: params.oauth_token_secret,
+      userId: req.user.id,
+      createdAt: Date.now(),
+    };
+
+    res.json({
+      authUrl: `${TWITTER_API}/oauth/authorize?oauth_token=${params.oauth_token}`,
+      oauth_token: params.oauth_token,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/oauth/twitter/access-token - Exchange PIN for Access Token
+app.post('/api/oauth/twitter/access-token', authMiddleware, async (req, res) => {
+  try {
+    const { oauth_token, oauth_verifier } = req.body;
+    if (!oauth_token || !oauth_verifier) {
+      return res.status(400).json({ error: 'oauth_token 和 oauth_verifier (PIN码) 必填' });
+    }
+
+    const stored = requestTokenStore[oauth_token];
+    if (!stored || stored.userId !== req.user.id) {
+      return res.status(400).json({ error: '无效的 oauth_token，请重新发起授权' });
+    }
+
+    const requestData = { url: `${TWITTER_API}/oauth/access_token`, method: 'POST', data: { oauth_verifier } };
+    const token = { key: oauth_token, secret: stored.oauth_token_secret };
+    const headers = twitterOAuth.toHeader(twitterOAuth.authorize(requestData, token));
+
+    const resp = await fetch(requestData.url, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ oauth_verifier }),
+    });
+    const text = await resp.text();
+    const params = Object.fromEntries(new URLSearchParams(text));
+
+    if (!params.oauth_token || !params.oauth_token_secret) {
+      return res.status(500).json({ error: '获取Access Token失败', detail: text });
+    }
+
+    // Clean up temp store
+    delete requestTokenStore[oauth_token];
+
+    // Save to accounts DB
+    const accounts = loadDB('accounts');
+    const existing = accounts.find(a => a.userId === req.user.id && a.platform === 'twitter' && a.platformUserId === params.user_id);
+    if (existing) {
+      // Update existing
+      existing.oauth_token = params.oauth_token;
+      existing.oauth_token_secret = params.oauth_token_secret;
+      existing.screenName = params.screen_name;
+      existing.updatedAt = Date.now();
+    } else {
+      accounts.push({
+        id: uuid(),
+        userId: req.user.id,
+        platform: 'twitter',
+        platformUserId: params.user_id,
+        screenName: params.screen_name,
+        name: `@${params.screen_name}`,
+        oauth_token: params.oauth_token,
+        oauth_token_secret: params.oauth_token_secret,
+        createdAt: Date.now(),
+      });
+    }
+    saveDB('accounts', accounts);
+
+    res.json({
+      ok: true,
+      screenName: params.screen_name,
+      platformUserId: params.user_id,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/oauth/twitter/post - Post a tweet (test)
+app.post('/api/oauth/twitter/post', authMiddleware, async (req, res) => {
+  try {
+    const { accountId, text } = req.body;
+    if (!accountId || !text) return res.status(400).json({ error: 'accountId 和 text 必填' });
+
+    const accounts = loadDB('accounts');
+    const account = accounts.find(a => a.id === accountId && a.userId === req.user.id && a.platform === 'twitter');
+    if (!account) return res.status(404).json({ error: 'Twitter账号不存在' });
+
+    // Build tweet body
+    const tweetBody = { text };
+    const requestData = { url: `${TWITTER_API}/2/tweets`, method: 'POST' };
+    const token = { key: account.oauth_token, secret: account.oauth_token_secret };
+    const headers = twitterOAuth.toHeader(twitterOAuth.authorize(requestData, token));
+
+    const resp = await fetch(requestData.url, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(tweetBody),
+    });
+    const data = await resp.json();
+    res.json({ status: resp.status, data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── Social Media Accounts (local fallback) ───────────
