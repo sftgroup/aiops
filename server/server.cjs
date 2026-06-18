@@ -808,6 +808,199 @@ app.get('/api/oauth/:platform/callback', async (req, res) => {
   res.json(publishes.sort((a, b) => b.createdAt - a.createdAt));
 });
 
+
+// ─── Direct Publish to Bound Accounts ─────────────────────
+app.post('/api/publish/direct', authMiddleware, async (req, res) => {
+  try {
+    const { contentId, accountIds, text } = req.body;
+    if (!contentId && !text) return res.status(400).json({ error: '请选择内容或输入发布文案' });
+    const contents = loadDB('contents');
+    const content = contentId ? contents.find(c => c.id === contentId && c.userId === req.user.id) : null;
+    const publishText = text || (content ? (content.text || content.subject || '') : '');
+    const accounts = loadDB('accounts');
+    let targetAccounts = accounts.filter(a => a.userId === req.user.id);
+    if (accountIds?.length) targetAccounts = targetAccounts.filter(a => accountIds.includes(a.id));
+    if (!targetAccounts.length) return res.status(400).json({ error: '未选择有效账号' });
+    const results = [];
+    const publishes = loadDB('publishes');
+    for (const account of targetAccounts) {
+      let result;
+      let success = false;
+      if (account.platform === 'twitter') {
+        try {
+          const tweetBody = { text: publishText };
+          const requestData = { url: TWITTER_API + '/2/tweets', method: 'POST' };
+          const token = { key: account.oauth_token, secret: account.oauth_token_secret };
+          const headers = twitterOAuth.toHeader(twitterOAuth.authorize(requestData, token));
+          const resp = await fetch(requestData.url, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify(tweetBody),
+          });
+          result = await resp.json();
+          success = resp.ok && result?.data?.id;
+        } catch (e) { result = { error: e.message }; }
+      } else {
+        result = { error: '平台 ' + account.platform + ' 暂不支持' };
+      }
+      const pub = {
+        id: uuid(), userId: req.user.id, contentId: contentId || null,
+        accountId: account.id, platform: account.platform,
+        screenName: account.screenName || account.name,
+        text: publishText.slice(0, 100),
+        status: success ? 'published' : 'failed',
+        result, createdAt: Date.now(),
+      };
+      publishes.push(pub);
+      results.push(pub);
+    }
+    saveDB('publishes', publishes);
+    if (content) { content.status = 'published'; saveDB('contents', contents); }
+    res.json(results);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/publishes/direct', authMiddleware, (req, res) => {
+  const publishes = loadDB('publishes').filter(p => p.userId === req.user.id && p.accountId);
+  res.json(publishes.sort((a, b) => b.createdAt - a.createdAt));
+});
+
+// ─── OAuth 2.0 Provider Framework ────────────────────────────
+const OAUTH_BASE_URL = process.env.OAUTH_BASE_URL || 'http://43.156.78.59:5288';
+const pkceStore = {};
+const OAUTH_PROVIDERS = {
+  facebook: {
+    name: 'Facebook/Meta',
+    authUrl: 'https://www.facebook.com/v22.0/dialog/oauth',
+    tokenUrl: 'https://graph.facebook.com/v22.0/oauth/access_token',
+    clientId: () => process.env.FACEBOOK_CLIENT_ID || '',
+    clientSecret: () => process.env.FACEBOOK_CLIENT_SECRET || '',
+    scope: 'pages_manage_posts,pages_read_engagement',
+    extraAuthParams: {},
+    parseUser: async (at) => {
+      const r = await fetch('https://graph.facebook.com/v22.0/me?access_token=' + at + '&fields=id,name');
+      return r.json();
+    },
+  },
+  youtube: {
+    name: 'YouTube',
+    authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    clientId: () => process.env.YOUTUBE_CLIENT_ID || '',
+    clientSecret: () => process.env.YOUTUBE_CLIENT_SECRET || '',
+    scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
+    extraAuthParams: { access_type: 'offline', prompt: 'consent' },
+    parseUser: async (at) => {
+      const r = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
+        { headers: { Authorization: '***' + at } });
+      const d = await r.json();
+      const ch = d.items?.[0];
+      return ch ? { id: ch.id, name: ch.snippet.title } : { id: 'unknown', name: 'YouTube User' };
+    },
+  },
+  reddit: {
+    name: 'Reddit',
+    authUrl: 'https://www.reddit.com/api/v1/authorize',
+    tokenUrl: 'https://www.reddit.com/api/v1/access_token',
+    clientId: () => process.env.REDDIT_CLIENT_ID || '',
+    clientSecret: () => process.env.REDDIT_CLIENT_SECRET || '',
+    scope: 'identity,submit,read',
+    extraAuthParams: { duration: 'permanent' },
+    parseUser: async (at) => {
+      const r = await fetch('https://oauth.reddit.com/api/v1/me',
+        { headers: { Authorization: '***' + at } });
+      return r.json();
+    },
+    tokenAuthHeader: () => {
+      const b = Buffer.from(process.env.REDDIT_CLIENT_ID + ':' + process.env.REDDIT_CLIENT_SECRET).toString('base64');
+      return { Authorization: '***' + b, 'User-Agent': 'Aiops/1.0' };
+    },
+  },
+};
+function genPKCE() {
+  const v = crypto.randomBytes(32).toString('base64url');
+  const c = crypto.createHash('sha256').update(v).digest('base64url');
+  return { verifier: v, challenge: c };
+}
+app.post('/api/oauth/:platform/auth-url', authMiddleware, async (req, res) => {
+  try {
+    const p = req.params.platform;
+    const prov = OAUTH_PROVIDERS[p];
+    if (!prov) return res.status(400).json({ error: '不支持的平台: ' + p });
+    const cid = prov.clientId();
+    if (!cid) return res.status(400).json({ error: prov.name + ' 未配置 Client ID' });
+    const state = crypto.randomBytes(16).toString('hex');
+    const pkce = genPKCE();
+    pkceStore[state] = { verifier: pkce.verifier, userId: req.user.id, platform: p, createdAt: Date.now() };
+    const params = new URLSearchParams();
+    params.set('client_id', cid);
+    params.set('redirect_uri', OAUTH_BASE_URL + '/api/oauth/' + p + '/callback');
+    params.set('response_type', 'code');
+    params.set('scope', prov.scope);
+    params.set('state', state);
+    params.set('code_challenge', pkce.challenge);
+    params.set('code_challenge_method', 'S256');
+    for (const k of Object.keys(prov.extraAuthParams)) {
+      const v = prov.extraAuthParams[k];
+      if (v) params.set(k, v);
+    }
+    res.json({ authUrl: prov.authUrl + '?' + params.toString() });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get('/api/oauth/:platform/callback', async (req, res) => {
+  try {
+    const p = req.params.platform;
+    const code = req.query.code;
+    const state = req.query.state;
+    const err = req.query.error;
+    const prov = OAUTH_PROVIDERS[p];
+    const base = OAUTH_BASE_URL;
+    if (err) return res.redirect(base + '/#/accounts?oauth_error=' + err);
+    if (!code || !state) return res.redirect(base + '/#/accounts?oauth_error=missing_params');
+    const stored = pkceStore[state];
+    if (!stored || stored.platform !== p || Date.now() - stored.createdAt > 600000) {
+      return res.redirect(base + '/#/accounts?oauth_error=expired');
+    }
+    const tp = new URLSearchParams();
+    tp.set('client_id', prov.clientId());
+    tp.set('client_secret', prov.clientSecret());
+    tp.set('code_verifier', stored.verifier);
+    tp.set('grant_type', 'authorization_code');
+    tp.set('code', code.toString());
+    tp.set('redirect_uri', base + '/api/oauth/' + p + '/callback');
+    const th = { 'Content-Type': 'application/x-www-form-urlencoded' };
+    if (prov.tokenAuthHeader) {
+      const h = prov.tokenAuthHeader();
+      for (const k of Object.keys(h)) th[k] = h[k];
+      tp.delete('client_secret');
+    }
+    const tr = await fetch(prov.tokenUrl, { method: 'POST', headers: th, body: tp.toString() });
+    const td = await tr.json();
+    if (!td.access_token) return res.redirect(base + '/#/accounts?oauth_error=token_exchange_failed');
+    const ui = await prov.parseUser(td.access_token);
+    const uid = ui.id || ui.name || 'unknown';
+    const uname = ui.name || ui.login || uid;
+    delete pkceStore[state];
+    const accounts = loadDB('accounts');
+    const existing = accounts.find(function(a) {
+      return a.userId === stored.userId && a.platform === p && a.platformUserId === uid;
+    });
+    if (existing) {
+      existing.access_token = td.access_token;
+      existing.refresh_token = td.refresh_token || existing.refresh_token;
+      existing.name = uname;
+      existing.updatedAt = Date.now();
+    } else {
+      accounts.push({ id: uuid(), userId: stored.userId, platform: p, platformUserId: uid,
+        name: uname, access_token: td.access_token, refresh_token: td.refresh_token || null, createdAt: Date.now() });
+    }
+    saveDB('accounts', accounts);
+    res.redirect(base + '/#/accounts?oauth_success=' + p);
+  } catch (e) {
+    res.redirect(OAUTH_BASE_URL + '/#/accounts?oauth_error=' + encodeURIComponent(e.message));
+  }
+});
+
 // ─── Dashboard Stats ──────────────────────────────────────
 // GET /api/stats
 app.get('/api/stats', authMiddleware, (req, res) => {
