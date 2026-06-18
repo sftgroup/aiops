@@ -1,0 +1,17 @@
+{
+  "name": "aiops-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.cjs",
+    "dev": "node --watch server.cjs"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "better-sqlite3": "^11.0.0",
+    "jsonwebtoken": "^9.0.0",
+    "bcryptjs": "^2.4.3",
+    "multer": "^1.4.5-lts.1"
+  }
+}
