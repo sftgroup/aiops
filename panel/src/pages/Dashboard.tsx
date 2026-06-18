@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth, api } from '../AuthContext';
-import { LayoutDashboard, Video, FileText, Send, Globe } from 'lucide-react';
+import { LayoutDashboard, Video, FileText, Send, Globe, Users } from 'lucide-react';
 
 interface Stats {
   totalVideos: number; totalTexts: number; published: number;
