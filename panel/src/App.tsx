@@ -7,7 +7,9 @@ import Dashboard from './pages/Dashboard';
 import ContentPage from './pages/ContentPage';
 import PublishPage from './pages/PublishPage';
 import AccountsPage from './pages/AccountsPage';
+import SettingsPage from './pages/SettingsPage';
 import VideoPage from './pages/VideoPage';
+import WorkflowPage from './pages/WorkflowPage';
 import Layout from './components/Layout';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -30,6 +32,8 @@ export default function App() {
             <Route path="content" element={<ContentPage />} />
             <Route path="publish" element={<PublishPage />} />
             <Route path="accounts" element={<AccountsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="workflows" element={<WorkflowPage />} />
           </Route>
         </Routes>
       </AuthProvider>

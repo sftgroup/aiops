@@ -122,7 +122,7 @@ export default function PublishPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {Object.entries(platformGroups).map(([platform, accs]) => (
+                {(Object.entries(platformGroups) as [string, any[]][]).map(([platform, accs]) => (
                   <div key={platform} className="bg-dark-bg rounded-lg p-3 border border-dark-border">
                     <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
                       {PLATFORM_ICONS[platform] || '🔗'} {platform}
@@ -173,7 +173,7 @@ export default function PublishPage() {
             <p className="text-sm text-gray-500">暂无绑定账号</p>
           ) : (
             <div className="space-y-2">
-              {Object.entries(platformGroups).map(([platform, accs]) => (
+              {(Object.entries(platformGroups) as [string, any[]][]).map(([platform, accs]) => (
                 <div key={platform} className="flex items-center justify-between text-sm">
                   <span>{PLATFORM_ICONS[platform] || '🔗'} {platform}</span>
                   <span className="text-gray-400">{accs.length} 个</span>

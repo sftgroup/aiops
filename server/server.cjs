@@ -653,7 +653,7 @@ app.get('/api/publishes/direct', authMiddleware, (req, res) => {
 // ─── OAuth 2.0 Provider Framework ────────────────────────────
 // Generic OAuth 2.0 Authorization Code flow for multiple platforms.
 // Callback URL: {OAUTH_BASE_URL}/api/oauth/{platform}/callback
-const OAUTH_BASE_URL = process.env.OAUTH_BASE_URL || 'http://43.156.78.59:5288';
+const OAUTH_BASE_URL = (loadDB('settings').oauth_base_url || process.env.OAUTH_BASE_URL || 'http://43.156.78.59:5288');
 const pkceStore = {};
 
 const OAUTH_PROVIDERS = {
@@ -661,8 +661,8 @@ const OAUTH_PROVIDERS = {
     name: 'Facebook/Meta',
     authUrl: 'https://www.facebook.com/v22.0/dialog/oauth',
     tokenUrl: 'https://graph.facebook.com/v22.0/oauth/access_token',
-    clientId: () => process.env.FACEBOOK_CLIENT_ID || '',
-    clientSecret: () => process.env.FACEBOOK_CLIENT_SECRET || '',
+    clientId: () => (loadDB('settings').facebook_client_id || process.env.FACEBOOK_CLIENT_ID || ''),
+    clientSecret: () => (loadDB('settings').facebook_client_secret || process.env.FACEBOOK_CLIENT_SECRET || ''),
     scope: 'pages_manage_posts,pages_read_engagement',
     extraAuthParams: {},
     parseUser: async (at) => {
@@ -674,8 +674,8 @@ const OAUTH_PROVIDERS = {
     name: 'YouTube',
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenUrl: 'https://oauth2.googleapis.com/token',
-    clientId: () => process.env.YOUTUBE_CLIENT_ID || '',
-    clientSecret: () => process.env.YOUTUBE_CLIENT_SECRET || '',
+    clientId: () => (loadDB('settings').youtube_client_id || process.env.YOUTUBE_CLIENT_ID || ''),
+    clientSecret: () => (loadDB('settings').youtube_client_secret || process.env.YOUTUBE_CLIENT_SECRET || ''),
     scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
     extraAuthParams: { access_type: 'offline', prompt: 'consent' },
     parseUser: async (at) => {
@@ -690,8 +690,8 @@ const OAUTH_PROVIDERS = {
     name: 'Reddit',
     authUrl: 'https://www.reddit.com/api/v1/authorize',
     tokenUrl: 'https://www.reddit.com/api/v1/access_token',
-    clientId: () => process.env.REDDIT_CLIENT_ID || '',
-    clientSecret: () => process.env.REDDIT_CLIENT_SECRET || '',
+    clientId: () => (loadDB('settings').reddit_client_id || process.env.REDDIT_CLIENT_ID || ''),
+    clientSecret: () => (loadDB('settings').reddit_client_secret || process.env.REDDIT_CLIENT_SECRET || ''),
     scope: 'identity,submit,read',
     extraAuthParams: { duration: 'permanent' },
     parseUser: async (at) => {
@@ -866,175 +866,93 @@ app.get('/api/publishes/direct', authMiddleware, (req, res) => {
 });
 
 // ─── OAuth 2.0 Provider Framework ────────────────────────────
-const OAUTH_BASE_URL = process.env.OAUTH_BASE_URL || 'http://43.156.78.59:5288';
-const pkceStore = {};
-const OAUTH_PROVIDERS = {
-  facebook: {
-    name: 'Facebook/Meta',
-    authUrl: 'https://www.facebook.com/v22.0/dialog/oauth',
-    tokenUrl: 'https://graph.facebook.com/v22.0/oauth/access_token',
-    clientId: () => process.env.FACEBOOK_CLIENT_ID || '',
-    clientSecret: () => process.env.FACEBOOK_CLIENT_SECRET || '',
-    scope: 'pages_manage_posts,pages_read_engagement',
-    extraAuthParams: {},
-    parseUser: async (at) => {
-      const r = await fetch('https://graph.facebook.com/v22.0/me?access_token=' + at + '&fields=id,name');
-      return r.json();
-    },
-  },
-  youtube: {
-    name: 'YouTube',
-    authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-    tokenUrl: 'https://oauth2.googleapis.com/token',
-    clientId: () => process.env.YOUTUBE_CLIENT_ID || '',
-    clientSecret: () => process.env.YOUTUBE_CLIENT_SECRET || '',
-    scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
-    extraAuthParams: { access_type: 'offline', prompt: 'consent' },
-    parseUser: async (at) => {
-      const r = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
-        { headers: { Authorization: '***' + at } });
-      const d = await r.json();
-      const ch = d.items?.[0];
-      return ch ? { id: ch.id, name: ch.snippet.title } : { id: 'unknown', name: 'YouTube User' };
-    },
-  },
-  reddit: {
-    name: 'Reddit',
-    authUrl: 'https://www.reddit.com/api/v1/authorize',
-    tokenUrl: 'https://www.reddit.com/api/v1/access_token',
-    clientId: () => process.env.REDDIT_CLIENT_ID || '',
-    clientSecret: () => process.env.REDDIT_CLIENT_SECRET || '',
-    scope: 'identity,submit,read',
-    extraAuthParams: { duration: 'permanent' },
-    parseUser: async (at) => {
-      const r = await fetch('https://oauth.reddit.com/api/v1/me',
-        { headers: { Authorization: '***' + at } });
-      return r.json();
-    },
-    tokenAuthHeader: () => {
-      const b = Buffer.from(process.env.REDDIT_CLIENT_ID + ':' + process.env.REDDIT_CLIENT_SECRET).toString('base64');
-      return { Authorization: '***' + b, 'User-Agent': 'Aiops/1.0' };
-    },
-  },
-};
-function genPKCE() {
-  const v = crypto.randomBytes(32).toString('base64url');
-  const c = crypto.createHash('sha256').update(v).digest('base64url');
-  return { verifier: v, challenge: c };
-}
-app.post('/api/oauth/:platform/auth-url', authMiddleware, async (req, res) => {
+
+// ─── Settings API ────────────────────────────────────────────
+// Settings stored in data/settings.json
+app.get('/api/settings', authMiddleware, (req, res) => {
+  if (req.user.username !== 'admin') return res.status(403).json({ error: '仅管理员可操作' });
+  res.json(loadDB('settings'));
+});
+
+app.post('/api/settings', authMiddleware, async (req, res) => {
   try {
-    const p = req.params.platform;
-    const prov = OAUTH_PROVIDERS[p];
-    if (!prov) return res.status(400).json({ error: '不支持的平台: ' + p });
-    const cid = prov.clientId();
-    if (!cid) return res.status(400).json({ error: prov.name + ' 未配置 Client ID' });
-    const state = crypto.randomBytes(16).toString('hex');
-    const pkce = genPKCE();
-    pkceStore[state] = { verifier: pkce.verifier, userId: req.user.id, platform: p, createdAt: Date.now() };
-    const params = new URLSearchParams();
-    params.set('client_id', cid);
-    params.set('redirect_uri', OAUTH_BASE_URL + '/api/oauth/' + p + '/callback');
-    params.set('response_type', 'code');
-    params.set('scope', prov.scope);
-    params.set('state', state);
-    params.set('code_challenge', pkce.challenge);
-    params.set('code_challenge_method', 'S256');
-    for (const k of Object.keys(prov.extraAuthParams)) {
-      const v = prov.extraAuthParams[k];
-      if (v) params.set(k, v);
+    if (req.user.username !== 'admin') return res.status(403).json({ error: '仅管理员可操作' });
+    const settings = loadDB('settings');
+    const { section, deepseek_key, facebook_client_id, facebook_client_secret,
+      youtube_client_id, youtube_client_secret, reddit_client_id, reddit_client_secret,
+      oauth_base_url, pexels_api_key, pixabay_api_key } = req.body;
+
+    if (deepseek_key) settings.deepseek_key = deepseek_key;
+    if (section === 'llm') settings.deepseek_key = deepseek_key;
+    if (section === 'oauth') settings.oauth_base_url = oauth_base_url;
+    if (section === 'facebook') {
+      settings.facebook_client_id = facebook_client_id;
+      settings.facebook_client_secret = facebook_client_secret;
     }
-    res.json({ authUrl: prov.authUrl + '?' + params.toString() });
+    if (section === 'youtube') {
+      settings.youtube_client_id = youtube_client_id;
+      settings.youtube_client_secret = youtube_client_secret;
+    }
+    if (section === 'reddit') {
+      settings.reddit_client_id = reddit_client_id;
+      settings.reddit_client_secret = reddit_client_secret;
+    }
+    if (section === 'medias') {
+      settings.pexels_api_key = pexels_api_key;
+      settings.pixabay_api_key = pixabay_api_key;
+    }
+
+    // Write to .env file too
+    const envLines = [
+      'DEEPSEEK_KEY=' + (settings.deepseek_key || ''),
+      'FACEBOOK_CLIENT_ID=' + (settings.facebook_client_id || ''),
+      'FACEBOOK_CLIENT_SECRET=' + (settings.facebook_client_secret || ''),
+      'YOUTUBE_CLIENT_ID=' + (settings.youtube_client_id || ''),
+      'YOUTUBE_CLIENT_SECRET=' + (settings.youtube_client_secret || ''),
+      'REDDIT_CLIENT_ID=' + (settings.reddit_client_id || ''),
+      'REDDIT_CLIENT_SECRET=' + (settings.reddit_client_secret || ''),
+      'OAUTH_BASE_URL=' + (settings.oauth_base_url || 'http://43.156.78.59:5288'),
+      'PEXELS_API_KEY=' + (settings.pexels_api_key || ''),
+      'PIXABAY_API_KEY=' + (settings.pixabay_api_key || ''),
+    ];
+    // Merge with existing .env
+    const envPath = path.join(__dirname, '.env');
+    const fs = require('fs');
+    let existingEnv = '';
+    try { existingEnv = fs.readFileSync(envPath, 'utf8'); } catch(e) {}
+    for (const line of envLines) {
+      const key = line.split('=')[0];
+      const regex = new RegExp('^' + key + '=.*', 'm');
+      if (regex.test(existingEnv)) {
+        existingEnv = existingEnv.replace(regex, line);
+      } else {
+        existingEnv += String.fromCharCode(10) + line;
+      }
+    }
+    fs.writeFileSync(envPath, existingEnv.trim() + String.fromCharCode(10), "utf8");
+
+    saveDB('settings', settings);
+    res.json({ status: 'ok', message: '配置已保存' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-app.get('/api/oauth/:platform/callback', async (req, res) => {
+
+// POST /api/settings/test-deepseek - Test DeepSeek connection
+app.post('/api/settings/test-deepseek', authMiddleware, async (req, res) => {
   try {
-    const p = req.params.platform;
-    const code = req.query.code;
-    const state = req.query.state;
-    const err = req.query.error;
-    const prov = OAUTH_PROVIDERS[p];
-    const base = OAUTH_BASE_URL;
-    if (err) return res.redirect(base + '/#/accounts?oauth_error=' + err);
-    if (!code || !state) return res.redirect(base + '/#/accounts?oauth_error=missing_params');
-    const stored = pkceStore[state];
-    if (!stored || stored.platform !== p || Date.now() - stored.createdAt > 600000) {
-      return res.redirect(base + '/#/accounts?oauth_error=expired');
-    }
-    const tp = new URLSearchParams();
-    tp.set('client_id', prov.clientId());
-    tp.set('client_secret', prov.clientSecret());
-    tp.set('code_verifier', stored.verifier);
-    tp.set('grant_type', 'authorization_code');
-    tp.set('code', code.toString());
-    tp.set('redirect_uri', base + '/api/oauth/' + p + '/callback');
-    const th = { 'Content-Type': 'application/x-www-form-urlencoded' };
-    if (prov.tokenAuthHeader) {
-      const h = prov.tokenAuthHeader();
-      for (const k of Object.keys(h)) th[k] = h[k];
-      tp.delete('client_secret');
-    }
-    const tr = await fetch(prov.tokenUrl, { method: 'POST', headers: th, body: tp.toString() });
-    const td = await tr.json();
-    if (!td.access_token) return res.redirect(base + '/#/accounts?oauth_error=token_exchange_failed');
-    const ui = await prov.parseUser(td.access_token);
-    const uid = ui.id || ui.name || 'unknown';
-    const uname = ui.name || ui.login || uid;
-    delete pkceStore[state];
-    const accounts = loadDB('accounts');
-    const existing = accounts.find(function(a) {
-      return a.userId === stored.userId && a.platform === p && a.platformUserId === uid;
+    const { key } = req.body;
+    if (!key) return res.status(400).json({ status: 'error', message: '缺少 API Key' });
+    const resp = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': '*** ' + key },
+      body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: 'hi' }], max_tokens: 5 }),
     });
-    if (existing) {
-      existing.access_token = td.access_token;
-      existing.refresh_token = td.refresh_token || existing.refresh_token;
-      existing.name = uname;
-      existing.updatedAt = Date.now();
+    if (resp.ok) {
+      res.json({ status: 'ok', message: '连接成功！' });
     } else {
-      accounts.push({ id: uuid(), userId: stored.userId, platform: p, platformUserId: uid,
-        name: uname, access_token: td.access_token, refresh_token: td.refresh_token || null, createdAt: Date.now() });
+      const err = await resp.json();
+      res.json({ status: 'error', message: err.error?.message || '连接失败 (HTTP ' + resp.status + ')' });
     }
-    saveDB('accounts', accounts);
-    res.redirect(base + '/#/accounts?oauth_success=' + p);
-  } catch (e) {
-    res.redirect(OAUTH_BASE_URL + '/#/accounts?oauth_error=' + encodeURIComponent(e.message));
-  }
-});
-
-// ─── Dashboard Stats ──────────────────────────────────────
-// GET /api/stats
-app.get('/api/stats', authMiddleware, (req, res) => {
-  const contents = loadDB('contents').filter(c => c.userId === req.user.id);
-  const publishes = loadDB('publishes').filter(p => p.userId === req.user.id);
-  const accounts = loadDB('accounts').filter(a => a.userId === req.user.id);
-
-  res.json({
-    totalVideos: contents.filter(c => c.type === 'video').length,
-    totalTexts: contents.filter(c => c.type === 'text').length,
-    published: publishes.length,
-    pendingPublish: contents.filter(c => c.status === 'draft').length,
-    accounts: accounts.length,
-    platforms: [...new Set(accounts.map(a => a.platform))],
-  });
-});
-
-// ─── MPTurbo Proxy ────────────────────────────────────────
-// GET /api/mpturbo/musics
-app.get('/api/mpturbo/musics', authMiddleware, async (req, res) => {
-  try {
-    const resp = await fetch(`${CONFIG.mpturboApi}/musics`);
-    const data = await resp.json();
-    res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// GET /api/mpturbo/video_materials
-app.get('/api/mpturbo/video_materials', authMiddleware, async (req, res) => {
-  try {
-    const resp = await fetch(`${CONFIG.mpturboApi}/video_materials`);
-    const data = await resp.json();
-    res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.json({ status: 'error', message: e.message }); }
 });
 
 // ─── AI Text Generation (DeepSeek) ────────────────────────
