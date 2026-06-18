@@ -107,122 +107,84 @@ app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── AiToEarn Proxy ────────────────────────────────
-const AI_TOEARN_BASE = () => CONFIG.aitoearnMcp;
-const INTERNAL_TOKEN = () => CONFIG.aitoearnInternalToken;
+// ─── AiToEarn MCP Proxy ────────────────────────────
+const AI_TOEARN_MCP = 'https://aitoearn.ai/api/unified/mcp';
+const AI_TOEARN_KEY = () => CONFIG.aitoearnKey;
 
-// Supported platforms map (type -> display name)
-const SUPPORTED_PLATFORMS = {
-  twitter: 'Twitter/X',
-  youtube: 'YouTube',
-  tiktok: 'TikTok',
-  meta: 'Instagram/Facebook',
-  bilibili: 'B站',
-  douyin: '抖音',
-  kwai: '快手',
-  pinterest: 'Pinterest',
-  threads: 'Threads',
-  'wx-gzh': '微信公众号',
+// Tools we use from MCP
+const MCP_TOOLS = {
+  listPlatforms: 'listChannelPlatforms',
+  createPublishFlow: 'createChannelPublishFlow',
+  listPublishRecords: 'listChannelPublishRecords',
+  getPublishRecord: 'getChannelPublishRecordByRecordId',
+  publishNow: 'publishChannelTaskNow',
 };
 
-// Helper to call AiToEarn API
-async function aitoearnPost(path, body) {
-  const url = `${AI_TOEARN_BASE()}${path}`;
-  const resp = await fetch(url, {
+// MCP JSON-RPC call helper
+async function mcpCall(toolName, args) {
+  const resp = await fetch(AI_TOEARN_MCP, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${INTERNAL_TOKEN()}`,
+      'Accept': 'application/json, text/event-stream',
+      'x-api-key': AI_TOEARN_KEY(),
     },
-    body: JSON.stringify(body || {}),
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'tools/call',
+      params: { name: toolName, arguments: args || {} },
+      id: 1,
+    }),
   });
-  const data = await resp.json();
-  return { status: resp.status, data };
+  return await resp.json();
 }
 
-async function aitoearnGet(path) {
-  const url = `${AI_TOEARN_BASE()}${path}`;
-  const resp = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${INTERNAL_TOKEN()}` },
-  });
-  const data = await resp.json();
-  return { status: resp.status, data };
-}
-
-// GET /api/aiops/platforms - List supported platforms
-app.get('/api/aiops/platforms', authMiddleware, (req, res) => {
-  res.json(Object.entries(SUPPORTED_PLATFORMS).map(([type, name]) => ({ type, name })));
-});
-
-// POST /api/aiops/platforms/:platform/auth-url - Get OAuth URL
-app.post('/api/aiops/platforms/:platform/auth-url', authMiddleware, async (req, res) => {
+// GET /api/aiops/platforms - List available platforms via AiToEarn MCP
+app.get('/api/aiops/platforms', authMiddleware, async (req, res) => {
   try {
-    const { platform } = req.params;
-    const callbackUrl = req.body.callbackUrl || `http://${req.headers.host}/api/aiops/oauth/callback`;
-    const { status, data } = await aitoearnPost(`/plat/${platform}/auth/url`, {
-      callbackUrl,
-      callbackMethod: 'GET',
-      scopes: req.body.scopes,
-      spaceId: req.body.spaceId,
-    });
-    res.status(status).json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// POST /api/aiops/oauth/callback - OAuth callback
-app.post('/api/aiops/oauth/callback', async (req, res) => {
-  // This receives OAuth callbacks from AiToEarn
-  // The callback contains code + state for finalizing account auth
-  res.json({ ok: true });
-});
-
-// GET /api/aiops/accounts - List connected accounts from all platforms
-app.get('/api/aiops/accounts', authMiddleware, async (req, res) => {
-  try {
-    const accounts = [];
-    for (const platform of Object.keys(SUPPORTED_PLATFORMS)) {
-      const { status, data } = await aitoearnPost(`/plat/${platform}/user/info`, {});
-      if (status === 200 && data?.data) {
-        const items = Array.isArray(data.data) ? data.data : [data.data];
-        items.forEach(item => {
-          if (item) accounts.push({ platform, ...item });
-        });
-      }
+    const mcpResp = await mcpCall(MCP_TOOLS.listPlatforms, {});
+    const platforms = mcpResp?.result?.content?.[0]?.text;
+    if (platforms) {
+      const parsed = typeof platforms === 'string' ? JSON.parse(platforms) : platforms;
+      return res.json(parsed);
     }
-    res.json(accounts);
+    res.json({ error: 'Failed to fetch platforms', raw: mcpResp });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// DELETE /api/aiops/accounts/:platform/:id - Remove account (placeholder)
-app.delete('/api/aiops/accounts/:platform/:id', authMiddleware, (req, res) => {
-  res.json({ ok: true, message: 'Account removal requires AiToEarn web UI' });
+// GET /api/aiops/account-ui - AiToEarn account management URL
+app.get('/api/aiops/account-ui', authMiddleware, (req, res) => {
+  res.json({ url: 'http://43.156.78.59:8090' });
 });
 
-// POST /api/aiops/publish - Publish content
+// POST /api/aiops/publish - Publish content via AiToEarn MCP
 app.post('/api/aiops/publish', authMiddleware, async (req, res) => {
   try {
-    const { contentId, platforms, schedule } = req.body;
+    const { contentId, platforms } = req.body;
     if (!contentId || !platforms?.length) return res.status(400).json({ error: '内容和平台必填' });
 
-    // Get content from DB
     const contents = loadDB('contents');
     const content = contents.find(c => c.id === contentId && c.userId === req.user.id);
     if (!content) return res.status(404).json({ error: '内容不存在' });
 
-    // Create publish tasks for each platform
-    const results = [];
-    for (const platform of platforms) {
-      const { status, data } = await aitoearnPost('/plat/publish/pubCreate', {
-        platform: platform === 'instagram' ? 'meta' : platform === 'facebook' ? 'meta' : platform,
-        content: {
-          title: content.subject || content.title || '',
-          body: content.text || content.subject || '',
-          media: content.urls ? content.urls.map(u => ({ url: u })) : [],
-        },
-        publishAt: schedule || null,
-      });
-      results.push({ platform, status, data });
-    }
+    // Map to AiToEarn platform identifiers
+    const platformMap = {
+      twitter: 'twitter', youtube: 'youtube', tiktok: 'tiktok',
+      meta: 'meta', instagram: 'meta', facebook: 'meta',
+      bilibili: 'bilibili', douyin: 'douyin',
+    };
+
+    const mcpArgs = {
+      platform: platformMap[platforms[0]] || platforms[0],
+      content: {
+        title: content.subject || content.title || '无标题',
+        description: content.text || content.subject || '',
+        texts: content.text ? [{ text: content.text }] : [],
+        medias: content.urls ? content.urls.map(u => ({ url: u })) : [],
+      },
+    };
+
+    const mcpResp = await mcpCall(MCP_TOOLS.createPublishFlow, mcpArgs);
 
     // Save publish record
     const publishes = loadDB('publishes');
@@ -231,16 +193,12 @@ app.post('/api/aiops/publish', authMiddleware, async (req, res) => {
       userId: req.user.id,
       contentId,
       platforms,
-      status: 'published',
-      schedule: schedule || null,
-      result: results,
+      status: 'pending',
+      mcpResult: mcpResp,
       createdAt: Date.now(),
     };
     publishes.push(pub);
     saveDB('publishes', publishes);
-
-    content.status = 'published';
-    saveDB('contents', contents);
 
     res.json(pub);
   } catch (e) { res.status(500).json({ error: e.message }); }
