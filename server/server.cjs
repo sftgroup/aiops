@@ -23,8 +23,9 @@ const CONFIG = {
   mpturboApi: process.env.MPTURBO_API || 'http://localhost:8080/api/v1',
   deepseekKey: process.env.DEEPSEEK_KEY || 'sk-7579cf86500a4d22b0c5e1d096e0481c',
   deepseekUrl: 'https://api.deepseek.com',
-  aitoearnMcp: process.env.AITO_EARN_MCP || 'https://aitoearn.ai/api/unified/mcp',
+  aitoearnMcp: process.env.AITO_EARN_MCP || 'http://localhost:8090/api',
   aitoearnKey: process.env.AITO_EARN_KEY || '',
+  aitoearnInternalToken: process.env.AITO_EARN_INTERNAL_TOKEN || 'change-this-secret-token',
   jwtSecret: process.env.JWT_SECRET || 'aiops-jwt-secret-change-in-production',
 };
 
@@ -106,7 +107,152 @@ app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── Social Media Accounts ───────────────────────────────
+// ─── AiToEarn Proxy ────────────────────────────────
+const AI_TOEARN_BASE = () => CONFIG.aitoearnMcp;
+const INTERNAL_TOKEN = () => CONFIG.aitoearnInternalToken;
+
+// Supported platforms map (type -> display name)
+const SUPPORTED_PLATFORMS = {
+  twitter: 'Twitter/X',
+  youtube: 'YouTube',
+  tiktok: 'TikTok',
+  meta: 'Instagram/Facebook',
+  bilibili: 'B站',
+  douyin: '抖音',
+  kwai: '快手',
+  pinterest: 'Pinterest',
+  threads: 'Threads',
+  'wx-gzh': '微信公众号',
+};
+
+// Helper to call AiToEarn API
+async function aitoearnPost(path, body) {
+  const url = `${AI_TOEARN_BASE()}${path}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${INTERNAL_TOKEN()}`,
+    },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await resp.json();
+  return { status: resp.status, data };
+}
+
+async function aitoearnGet(path) {
+  const url = `${AI_TOEARN_BASE()}${path}`;
+  const resp = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${INTERNAL_TOKEN()}` },
+  });
+  const data = await resp.json();
+  return { status: resp.status, data };
+}
+
+// GET /api/aiops/platforms - List supported platforms
+app.get('/api/aiops/platforms', authMiddleware, (req, res) => {
+  res.json(Object.entries(SUPPORTED_PLATFORMS).map(([type, name]) => ({ type, name })));
+});
+
+// POST /api/aiops/platforms/:platform/auth-url - Get OAuth URL
+app.post('/api/aiops/platforms/:platform/auth-url', authMiddleware, async (req, res) => {
+  try {
+    const { platform } = req.params;
+    const callbackUrl = req.body.callbackUrl || `http://${req.headers.host}/api/aiops/oauth/callback`;
+    const { status, data } = await aitoearnPost(`/plat/${platform}/auth/url`, {
+      callbackUrl,
+      callbackMethod: 'GET',
+      scopes: req.body.scopes,
+      spaceId: req.body.spaceId,
+    });
+    res.status(status).json(data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/aiops/oauth/callback - OAuth callback
+app.post('/api/aiops/oauth/callback', async (req, res) => {
+  // This receives OAuth callbacks from AiToEarn
+  // The callback contains code + state for finalizing account auth
+  res.json({ ok: true });
+});
+
+// GET /api/aiops/accounts - List connected accounts from all platforms
+app.get('/api/aiops/accounts', authMiddleware, async (req, res) => {
+  try {
+    const accounts = [];
+    for (const platform of Object.keys(SUPPORTED_PLATFORMS)) {
+      const { status, data } = await aitoearnPost(`/plat/${platform}/user/info`, {});
+      if (status === 200 && data?.data) {
+        const items = Array.isArray(data.data) ? data.data : [data.data];
+        items.forEach(item => {
+          if (item) accounts.push({ platform, ...item });
+        });
+      }
+    }
+    res.json(accounts);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/aiops/accounts/:platform/:id - Remove account (placeholder)
+app.delete('/api/aiops/accounts/:platform/:id', authMiddleware, (req, res) => {
+  res.json({ ok: true, message: 'Account removal requires AiToEarn web UI' });
+});
+
+// POST /api/aiops/publish - Publish content
+app.post('/api/aiops/publish', authMiddleware, async (req, res) => {
+  try {
+    const { contentId, platforms, schedule } = req.body;
+    if (!contentId || !platforms?.length) return res.status(400).json({ error: '内容和平台必填' });
+
+    // Get content from DB
+    const contents = loadDB('contents');
+    const content = contents.find(c => c.id === contentId && c.userId === req.user.id);
+    if (!content) return res.status(404).json({ error: '内容不存在' });
+
+    // Create publish tasks for each platform
+    const results = [];
+    for (const platform of platforms) {
+      const { status, data } = await aitoearnPost('/plat/publish/pubCreate', {
+        platform: platform === 'instagram' ? 'meta' : platform === 'facebook' ? 'meta' : platform,
+        content: {
+          title: content.subject || content.title || '',
+          body: content.text || content.subject || '',
+          media: content.urls ? content.urls.map(u => ({ url: u })) : [],
+        },
+        publishAt: schedule || null,
+      });
+      results.push({ platform, status, data });
+    }
+
+    // Save publish record
+    const publishes = loadDB('publishes');
+    const pub = {
+      id: uuid(),
+      userId: req.user.id,
+      contentId,
+      platforms,
+      status: 'published',
+      schedule: schedule || null,
+      result: results,
+      createdAt: Date.now(),
+    };
+    publishes.push(pub);
+    saveDB('publishes', publishes);
+
+    content.status = 'published';
+    saveDB('contents', contents);
+
+    res.json(pub);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/aiops/publishes - List publish records
+app.get('/api/aiops/publishes', authMiddleware, (req, res) => {
+  const publishes = loadDB('publishes').filter(p => p.userId === req.user.id);
+  res.json(publishes.sort((a, b) => b.createdAt - a.createdAt));
+});
+
+// ─── Social Media Accounts (local fallback) ───────────
 // GET /api/accounts
 app.get('/api/accounts', authMiddleware, (req, res) => {
   const accounts = loadDB('accounts').filter(a => a.userId === req.user.id);

@@ -4,27 +4,34 @@ import toast from 'react-hot-toast';
 import { Send, CheckCircle2, Clock, Globe } from 'lucide-react';
 
 const PLATFORMS = [
-  { id: 'twitter', label: 'Twitter/X' },
-  { id: 'youtube', label: 'YouTube' },
-  { id: 'tiktok', label: 'TikTok' },
-  { id: 'instagram', label: 'Instagram' },
-  { id: 'facebook', label: 'Facebook' },
+  { id: 'twitter', label: 'Twitter/X', icon: '🐦' },
+  { id: 'youtube', label: 'YouTube', icon: '▶️' },
+  { id: 'tiktok', label: 'TikTok', icon: '🎵' },
+  { id: 'meta', label: 'Instagram/Facebook', icon: '📱' },
 ];
 
 export default function PublishPage() {
   const { token } = useAuth();
   const [contents, setContents] = useState<any[]>([]);
   const [publishes, setPublishes] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [selectedContent, setSelectedContent] = useState('');
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [publishing, setPublishing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const load = async () => {
     if (!token) return;
     try {
-      setContents(await api(token).get('/contents'));
-      setPublishes(await api(token).get('/publishes'));
-    } catch {}
+      const [c, p, a] = await Promise.all([
+        api(token).get('/contents'),
+        api(token).get('/aiops/publishes'),
+        api(token).get('/aiops/accounts'),
+      ]);
+      setContents(c);
+      setPublishes(p);
+      setAccounts(a);
+    } catch {} finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, [token]);
@@ -40,13 +47,21 @@ export default function PublishPage() {
     if (selectedPlatforms.length === 0) return toast.error('请选择至少一个平台');
     setPublishing(true);
     try {
-      await api(token!).post('/publish', { contentId: selectedContent, platforms: selectedPlatforms });
+      await api(token!).post('/aiops/publish', {
+        contentId: selectedContent,
+        platforms: selectedPlatforms,
+      });
       toast.success('发布成功');
       load();
       setSelectedContent('');
       setSelectedPlatforms([]);
     } catch (e: any) { toast.error(e.message); }
     finally { setPublishing(false); }
+  };
+
+  const hasAccountForPlatform = (platform: string) => {
+    const mapped = platform === 'instagram' || platform === 'facebook' ? 'meta' : platform;
+    return accounts.some(a => a.platform === mapped);
   };
 
   return (
@@ -67,34 +82,47 @@ export default function PublishPage() {
               <option value="">-- 请选择 --</option>
               {contents.filter(c => c.status !== 'published').map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.subject || c.title || '无标题'} ({c.type === 'video' ? '视频' : '文案'})
+                  {c.subject || c.title || '无标题'} ({c.type === 'video' ? '🎬' : '📝'})
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-2">选择平台</label>
+            <label className="block text-sm text-gray-400 mb-2">
+              选择平台
+              <span className="text-xs text-gray-600 ml-2">(需先绑定对应平台账号)</span>
+            </label>
             <div className="flex flex-wrap gap-2">
-              {PLATFORMS.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => togglePlatform(p.id)}
-                  className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                    selectedPlatforms.includes(p.id)
-                      ? 'bg-accent-primary/20 border-accent-primary text-accent-primary'
-                      : 'bg-dark-bg border-dark-border text-gray-400 hover:border-gray-500'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+              {PLATFORMS.map(p => {
+                const hasAccount = hasAccountForPlatform(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => hasAccount && togglePlatform(p.id)}
+                    disabled={!hasAccount}
+                    className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                      !hasAccount
+                        ? 'bg-dark-bg border-dark-border text-gray-600 cursor-not-allowed'
+                        : selectedPlatforms.includes(p.id)
+                          ? 'bg-accent-primary/20 border-accent-primary text-accent-primary'
+                          : 'bg-dark-bg border-dark-border text-gray-400 hover:border-gray-500'
+                    }`}
+                    title={!hasAccount ? '请先在账号管理绑定该平台' : p.label}
+                  >
+                    {p.icon} {p.label}
+                  </button>
+                );
+              })}
             </div>
+            {accounts.length === 0 && (
+              <p className="text-xs text-yellow-500 mt-2">⚠️ 暂无已绑定的社交账号，先去「账号管理」绑定</p>
+            )}
           </div>
 
           <button
             onClick={handlePublish}
-            disabled={publishing}
+            disabled={publishing || selectedPlatforms.length === 0}
             className="flex items-center justify-center gap-2 w-full py-2.5 bg-accent-primary rounded-lg font-medium hover:bg-accent-primary/80 transition-colors disabled:opacity-50"
           >
             <Send size={16} />
@@ -102,35 +130,35 @@ export default function PublishPage() {
           </button>
         </div>
 
-        {/* AI To Earn info */}
         <div className="bg-dark-card rounded-xl p-5 border border-dark-border">
-          <h3 className="font-semibold mb-3 flex items-center gap-2"><Globe size={16} /> AiToEarn 集成</h3>
+          <h3 className="font-semibold mb-3 flex items-center gap-2"><Globe size={16} /> 本地 AiToEarn</h3>
           <p className="text-sm text-gray-400 mb-3">
-            通过 AiToEarn MCP 协议自动分发到各平台。
-            需在服务器配置 `AITO_EARN_KEY` 环境变量。
+            内容通过本地的 AiToEarn 服务分发到各平台。
           </p>
           <div className="text-xs text-gray-500 space-y-1">
-            <p>🔹 支持平台：Twitter/X、YouTube、TikTok、Instagram、Facebook、LinkedIn 等</p>
-            <p>🔹 未配置 AiToEarn Key 时为模拟发布</p>
+            <p>🔹 已连接平台：{accounts.filter(a => a.platform).length} 个</p>
+            <p>🔹 AiToEarn 管理界面：<a href="http://43.156.78.59:8090" target="_blank" className="text-accent-primary hover:underline">http://43.156.78.59:8090</a></p>
           </div>
         </div>
       </div>
 
       {/* Publish History */}
       <h3 className="font-semibold mb-3">发布记录</h3>
-      {publishes.length === 0 ? (
+      {loading ? (
+        <div className="text-gray-500">加载中...</div>
+      ) : publishes.length === 0 ? (
         <div className="bg-dark-card rounded-xl p-8 border border-dark-border text-center text-gray-500">暂无发布记录</div>
       ) : (
         <div className="space-y-2">
           {publishes.map(p => (
             <div key={p.id} className="bg-dark-card rounded-lg p-3 border border-dark-border flex items-center gap-3">
-              {p.status === 'published' ? <CheckCircle2 size={18} className="text-green-400" /> : <Clock size={18} className="text-yellow-400" />}
-              <div className="flex-1">
+              <CheckCircle2 size={18} className="text-green-400 shrink-0" />
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">
                   发布到 {p.platforms?.join(', ')}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {new Date(p.createdAt).toLocaleString('zh-CN')} · {p.status === 'published' ? '已发布' : '模拟'}
+                  {new Date(p.createdAt).toLocaleString('zh-CN')}
                 </p>
               </div>
             </div>
