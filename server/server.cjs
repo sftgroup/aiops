@@ -1452,28 +1452,54 @@ platformsText +
     const videos = await Promise.all(videoPromises);
     setProgress('videomaker', 'done');
 
-    // ====== 4. Stitcher: Stitch video segments via ffmpeg ======
+    // ====== 4. Stitcher: Stitch video segments via LibTV video-clip ======
     setProgress('stitcher', 'running');
     (async function() {
       try {
-        var vidFiles = [];
+        await ensureLibtvProject();
+        var uploadedNames = [];
         for (var si = 0; si < videos.length; si++) {
           var vu = videos[si].videoUrl;
           if (vu && vu.startsWith('/api/file/')) {
             var fp = path.join(DATA_DIR, vu.replace('/api/file/', ''));
-            if (fs.existsSync(fp)) vidFiles.push(fp);
+            if (fs.existsSync(fp)) {
+              var upName = 'clip_' + Date.now().toString(36) + '_' + si;
+              await libtvExec(['upload', upName, '-f', fp, '-t', 'video']);
+              uploadedNames.push(upName);
+            }
           }
         }
-        if (vidFiles.length > 1) {
-          var listPath = path.join(DATA_DIR, 'flist_' + Date.now().toString(36) + '.txt');
-          fs.writeFileSync(listPath, vidFiles.map(function(f) { return "file '" + f.replace(/'/g, "'\\''") + "'"; }).join('\n'));
-          var outName = 'stitched_' + Date.now().toString(36) + '.mp4';
-          var outPath = path.join(DATA_DIR, outName);
-          require('child_process').execSync('ffmpeg -y -f concat -safe 0 -i \"' + listPath + '\" -c copy \"' + outPath + '\"', { timeout: 120000 });
-          fs.unlinkSync(listPath);
-          if (fs.existsSync(outPath)) {
+        if (uploadedNames.length > 1) {
+          var clipNode = 'stitch_' + Date.now().toString(36);
+          var clipArgs = ['node', 'create', clipNode, '-t', 'video-clip'];
+          for (var sni = 0; sni < uploadedNames.length; sni++) {
+            clipArgs.push('--left-add', uploadedNames[sni]);
+          }
+          clipArgs.push('-r');
+          await libtvExec(clipArgs);
+          // Wait for the video-clip to complete (it creates an output node)
+          var clipData = await libtvPollNode(clipNode, 300);
+          var clipUrl = clipData.data && clipData.data.url && clipData.data.url[0];
+          if (!clipUrl) {
+            // Check for output node named 'final_video 成片' or similar
+            var outRaw = await libtvExec(['node', 'list']);
+            if (typeof outRaw === 'string') {
+              var lines = outRaw.trim().split('\n').filter(function(l) { return l.trim(); });
+              for (var li = 0; li < lines.length; li++) {
+                try {
+                  var n = JSON.parse(lines[li]);
+                  if (n.data && n.data.url && n.data.url.length) { clipUrl = n.data.url[0]; break; }
+                } catch(e) {}
+              }
+            }
+          }
+          if (clipUrl) {
+            var clipResp = await fetch(clipUrl);
+            var clipBuf = Buffer.from(await clipResp.arrayBuffer());
+            var clipName = 'stitched_' + Date.now().toString(36) + '.mp4';
+            fs.writeFileSync(path.join(DATA_DIR, clipName), clipBuf);
             l2 = loadTeamTasks(); i2 = l2.findIndex(function(t) { return t._id === task._id; });
-            if (i2 >= 0) { l2[i2].stitchedVideoUrl = '/api/file/' + outName; saveTeamTasks(l2); }
+            if (i2 >= 0) { l2[i2].stitchedVideoUrl = '/api/file/' + clipName; saveTeamTasks(l2); }
           }
         }
       } catch(e) { /* stitcher failure not fatal */ }
