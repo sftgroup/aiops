@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const crypto = require('crypto');
 const OAuth = require('oauth-1.0a');
 
@@ -58,13 +59,28 @@ function uuid() { return 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, c =
 
 // ─── LibTV CLI Integration ──────────────────────────────
 const LIBTV_PATH = '/home/ubuntu/.libtv/libtv';
-const LIBTV_ENV = Object.assign({}, process.env, { PATH: '/home/ubuntu/.libtv:' + (process.env.PATH || ''), LIBTV_TOKEN: process.env.LIBTV_TOKEN || '' });
+var LIBTV_CRED = path.join(os.homedir(), '.libtv', 'credentials.json');
+var LIBTV_ENV = Object.assign({}, process.env, { PATH: '/home/ubuntu/.libtv:' + (process.env.PATH || '') });
+delete LIBTV_ENV.LIBTV_TOKEN;
 
 function refreshLibtvToken() {
   try {
     var s = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'settings.json'), 'utf8'));
-    if (s && s.libtv_token) { LIBTV_ENV.LIBTV_TOKEN = s.libtv_token; process.env.LIBTV_TOKEN = s.libtv_token; }
+    if (s && s.libtv_token) {
+      var cred = {};
+      try { cred = JSON.parse(fs.readFileSync(LIBTV_CRED, 'utf8')); } catch(e) {}
+      if (cred.usertoken !== s.libtv_token) {
+        cred.usertoken = s.libtv_token;
+        cred.savedAt = new Date().toISOString();
+        fs.writeFileSync(LIBTV_CRED, JSON.stringify(cred, null, 2));
+      }
+    }
   } catch(e) {}
+}
+
+function hasLibtvAuth() {
+  refreshLibtvToken();
+  try { return fs.existsSync(LIBTV_CRED) && JSON.parse(fs.readFileSync(LIBTV_CRED, 'utf8')).usertoken; } catch(e) { return false; }
 }
 
 function libtvExec(args) {
@@ -117,7 +133,7 @@ function libtvPollNode(nodeName, timeoutSec) {
 async function libtvGenImage(prompt, modelName) {
   try {
     refreshLibtvToken();
-    if (!LIBTV_ENV.LIBTV_TOKEN) return '';
+    if (!hasLibtvAuth()) return '';
     await ensureLibtvProject();
     var nodeName = 'img_' + Date.now().toString(36);
     await libtvExec(['node', 'create', nodeName, '-t', 'image', '--prompt', prompt, '-s', 'model=' + modelName, '-r']);
@@ -137,7 +153,7 @@ async function libtvGenImage(prompt, modelName) {
 async function libtvGenVideo(prompt, modelName) {
   try {
     refreshLibtvToken();
-    if (!LIBTV_ENV.LIBTV_TOKEN) return '';
+    if (!hasLibtvAuth()) return '';
     await ensureLibtvProject();
     var nodeName = 'vid_' + Date.now().toString(36);
     await libtvExec(['node', 'create', nodeName, '-t', 'video', '--prompt', prompt, '-s', 'model=' + modelName, '-r']);
@@ -1093,7 +1109,7 @@ app.post('/api/settings/test-deepseek', authMiddleware, async (req, res) => {
 app.post('/api/settings/test-libtv', authMiddleware, async (req, res) => {
   try {
     refreshLibtvToken();
-    if (!LIBTV_ENV.LIBTV_TOKEN) return res.json({ status: 'error', message: '请先在设置中配置 LibTV Token' });
+    if (!hasLibtvAuth()) return res.json({ status: 'error', message: '请先在设置中配置 LibTV Token' });
     const result = await libtvExec(['account', 'info']);
     if (result && result.user) {
       res.json({ status: 'ok', message: '连接成功！用户: ' + (result.user.nickname || result.user.uuid) });
@@ -1209,7 +1225,7 @@ app.post('/api/team-tasks/today/video', authMiddleware, async (req, res) => {
         date: today, userId: req.user.id, subject: req.body.subject || '',
         config: { articles: 0, videos: 0, publishTargets: {}, publishAccounts: {}, schedule: { publishAt: '', intervalMinutes: 5 } },
         articles: [], videos: [], publishLog: [],
-        progress: { copywriter: 'idle', imagegen: 'idle', videomaker: 'idle', reviewer: 'idle', publisher: 'idle' },
+        progress: { copywriter: 'idle', imagegen: 'idle', videomaker: 'idle', stitcher: 'idle', reviewer: 'idle', publisher: 'idle' },
         status: 'idle', createdAt: new Date().toISOString(),
       };
       list.push(task);
@@ -1224,7 +1240,7 @@ app.post('/api/team-tasks/today/video', authMiddleware, async (req, res) => {
     (async function() {
       try {
         refreshLibtvToken();
-        if (LIBTV_ENV.LIBTV_TOKEN) {
+        if (hasLibtvAuth()) {
           var settings2 = loadDB('settings');
           if (Array.isArray(settings2)) settings2 = {};
           var libtvVideoModel2 = (settings2 && settings2.libtv_video_model) || 'Happy Horse 1.0';
@@ -1266,7 +1282,7 @@ app.post('/api/team-tasks/:id/run', authMiddleware, async (req, res) => {
   
   task.status = 'running';
   // Init progress
-  task.progress = { copywriter: 'pending', imagegen: 'pending', videomaker: 'pending', reviewer: 'pending', publisher: 'pending' };
+  task.progress = { copywriter: 'pending', imagegen: 'pending', videomaker: 'pending', stitcher: 'pending', reviewer: 'pending', publisher: 'pending' };
   task.articles = [];
   task.videos = [];
   task.publishLog = [];
@@ -1429,7 +1445,35 @@ platformsText +
     const videos = await Promise.all(videoPromises);
     setProgress('videomaker', 'done');
 
-    // ====== 4. Reviewer: Auto-review all content ======
+    // ====== 4. Stitcher: Stitch video segments into one long video ======
+    setProgress('stitcher', 'running');
+    (async function() {
+      try {
+        var vidFiles = [];
+        for (var vi = 0; vi < videos.length; vi++) {
+          var vu = videos[vi].videoUrl;
+          if (vu && vu.startsWith('/api/file/')) {
+            var fp = path.join(DATA_DIR, vu.replace('/api/file/', ''));
+            if (fs.existsSync(fp)) vidFiles.push(fp);
+          }
+        }
+        if (vidFiles.length > 1) {
+          var concatList = path.join(DATA_DIR, 'stitch_' + Date.now().toString(36) + '.txt');
+          fs.writeFileSync(concatList, vidFiles.map(function(f) { return "file '" + f.replace(/'/g, "'\\''") + "'"; }).join('\n'));
+          var outName = 'stitched_' + Date.now().toString(36) + '.mp4';
+          var outPath = path.join(DATA_DIR, outName);
+          cp.execSync('ffmpeg -y -f concat -safe 0 -i "' + concatList + '" -c copy "' + outPath + '"', { timeout: 120000 });
+          fs.unlinkSync(concatList);
+          if (fs.existsSync(outPath)) {
+            l2 = loadTeamTasks(); i2 = l2.findIndex(function(t) { return t._id === task._id; });
+            if (i2 >= 0) { l2[i2].stitchedVideoUrl = '/api/file/' + outName; saveTeamTasks(l2); }
+          }
+        }
+      } catch(e) { /* stitcher failure not fatal */ }
+    })();
+    setProgress('stitcher', 'done');
+
+    // ====== 5. Reviewer: Auto-review all content ======
     setProgress('reviewer', 'running');
     for (let i = 0; i < articles.length; i++) {
       const art = articles[i];
@@ -1468,6 +1512,7 @@ platformsText +
       l2[i2].progress.copywriter = 'done';
       l2[i2].progress.imagegen = articles.some(function(a) { return a.imageUrl; }) ? 'done' : 'skip';
       l2[i2].progress.videomaker = 'done';
+      l2[i2].progress.stitcher = l2[i2].stitchedVideoUrl ? 'done' : 'skip';
       l2[i2].progress.reviewer = 'done';
       l2[i2].progress.publisher = 'idle';
       saveTeamTasks(l2);

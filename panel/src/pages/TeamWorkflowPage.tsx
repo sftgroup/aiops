@@ -13,6 +13,7 @@ interface TeamTask {
   articles: ArticleItem[]; videos: VideoItem[]; publishLog: any[];
   progress: Record<string, string>;
   status: 'idle' | 'running' | 'done';
+  stitchedVideoUrl?: string;
 }
 
 interface ArticleItem {
@@ -31,8 +32,9 @@ interface VideoItem {
 
 const EMPLOYEES = [
   { key: 'copywriter', icon: Copy, label: '文案员工', color: 'bg-blue-500', desc: 'DeepSeek 生成图文' },
-  { key: 'imagegen', icon: Image, label: '配图员工', color: 'bg-purple-500', desc: 'Doubao AI 配图' },
+  { key: 'imagegen', icon: Image, label: '配图员工', color: 'bg-purple-500', desc: 'LibTV AI 配图' },
   { key: 'videomaker', icon: Video, label: '视频员工', color: 'bg-orange-500', desc: 'Seedance 短视频' },
+  { key: 'stitcher', icon: Layers, label: '拼接员工', color: 'bg-pink-500', desc: '多段合成长视频' },
   { key: 'reviewer', icon: Eye, label: '审核员工', color: 'bg-teal-500', desc: 'AI 内容审核' },
   { key: 'publisher', icon: Send, label: '发布员工', color: 'bg-green-500', desc: '排程+多账号发布' },
 ];
@@ -216,7 +218,7 @@ export default function TeamWorkflowPage() {
           <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
             <Layers size={14} /> 团队进度
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
             {EMPLOYEES.map(emp => {
               const val = progValue(emp.key);
               const label = progLabel(emp.key);
@@ -490,7 +492,18 @@ export default function TeamWorkflowPage() {
             </div>
           </div>
 
-          {/* Videos */}
+          {/* Stitched Video */}
+      {task.stitchedVideoUrl && (
+        <div className="mb-6 bg-dark-card rounded-xl p-4 border border-accent-primary/30">
+          <h3 className="font-semibold mb-3 flex items-center gap-2 text-accent-primary">
+            <Layers size={16} /> 拼接完成视频
+            <span className="text-xs text-gray-500 font-normal ml-2">({task.videos.length}段合成)</span>
+          </h3>
+          <video src={task.stitchedVideoUrl} controls className="w-full max-w-2xl rounded-lg bg-black" />
+        </div>
+      )}
+
+      {/* Videos */}
           <div>
             <h3 className="font-semibold mb-3 flex items-center gap-2">
               <Video size={16} /> 视频内容
