@@ -150,24 +150,27 @@ async function libtvGenImage(prompt, modelName) {
   } catch(e) { return ''; }
 }
 
-async function libtvGenVideo(prompt, modelName) {
+async function libtvGenVideo(prompt, modelName, duration) {
   try {
     refreshLibtvToken();
-    if (!hasLibtvAuth()) return '';
+    if (!hasLibtvAuth()) return { url: '', nodeName: '' };
     await ensureLibtvProject();
     var nodeName = 'vid_' + Date.now().toString(36);
-    await libtvExec(['node', 'create', nodeName, '-t', 'video', '--prompt', prompt, '-s', 'model=' + modelName, '-r']);
-    var node = await libtvPollNode(nodeName, 300);
-    var url = node.data && node.data.url && node.data.url[0];
+    var params = ['node', 'create', nodeName, '-t', 'video', '--prompt', prompt, '-s', 'model=' + modelName];
+    if (duration) params.push('-s', 'duration=' + duration);
+    params.push('-r');
+    await libtvExec(params);
+    var nodeData = await libtvPollNode(nodeName, 300);
+    var url = nodeData.data && nodeData.data.url && nodeData.data.url[0];
     if (url) {
       var vidResp = await fetch(url);
       var vidBuf = Buffer.from(await vidResp.arrayBuffer());
       var vidName = 'libtv_' + Date.now().toString(36) + '.mp4';
       fs.writeFileSync(path.join(DATA_DIR, vidName), vidBuf);
-      return '/api/file/' + vidName;
+      return { url: '/api/file/' + vidName, nodeName: nodeName };
     }
-    return url || '';
-  } catch(e) { return ''; }
+    return { url: url || '', nodeName: '' };
+  } catch(e) { return { url: '', nodeName: '' }; }
 }
 
 // ─── Auth ─────────────────────────────────────────────────
@@ -1244,7 +1247,8 @@ app.post('/api/team-tasks/today/video', authMiddleware, async (req, res) => {
           var settings2 = loadDB('settings');
           if (Array.isArray(settings2)) settings2 = {};
           var libtvVideoModel2 = (settings2 && settings2.libtv_video_model) || 'Happy Horse 1.0';
-          var url = await libtvGenVideo(vid.script || '主题：' + vid.subject, libtvVideoModel2);
+          var result = await libtvGenVideo(vid.script || '主题：' + vid.subject, libtvVideoModel2);
+          var url = result.url;
           var l = loadTeamTasks();
           var ti = l.findIndex(function(t) { return t._id === task._id; });
           if (ti >= 0) {
@@ -1424,7 +1428,10 @@ platformsText +
         if (process.env.LIBTV_TOKEN || settings?.libtv_token) {
           try {
             var vidPrompt = video.script || '主题：' + video.subject;
-            video.videoUrl = await libtvGenVideo(vidPrompt, libtvVideoModel);
+            var segDur = (l2[i2] && l2[i2].config && l2[i2].config.segmentDuration) || 15;
+            var vResult = await libtvGenVideo(vidPrompt, libtvVideoModel, segDur);
+            video.videoUrl = vResult.url;
+            video.libtvNode = vResult.nodeName;
             video.review.status = video.videoUrl ? 'pass' : 'pending';
           } catch(e) { video.review.status = 'pending'; }
         } else {
@@ -1445,31 +1452,35 @@ platformsText +
     const videos = await Promise.all(videoPromises);
     setProgress('videomaker', 'done');
 
-    // ====== 4. Stitcher: Stitch video segments into one long video ======
+    // ====== 4. Stitcher: Stitch video segments via LibTV video-clip ======
     setProgress('stitcher', 'running');
     (async function() {
       try {
-        var vidFiles = [];
-        for (var vi = 0; vi < videos.length; vi++) {
-          var vu = videos[vi].videoUrl;
-          if (vu && vu.startsWith('/api/file/')) {
-            var fp = path.join(DATA_DIR, vu.replace('/api/file/', ''));
-            if (fs.existsSync(fp)) vidFiles.push(fp);
-          }
+        await ensureLibtvProject();
+        var segNodes = [];
+        for (var si = 0; si < videos.length; si++) {
+          if (videos[si].libtvNode) segNodes.push(videos[si].libtvNode);
         }
-        if (vidFiles.length > 1) {
-          var concatList = path.join(DATA_DIR, 'stitch_' + Date.now().toString(36) + '.txt');
-          fs.writeFileSync(concatList, vidFiles.map(function(f) { return "file '" + f.replace(/'/g, "'\\''") + "'"; }).join('\n'));
-          var outName = 'stitched_' + Date.now().toString(36) + '.mp4';
-          var outPath = path.join(DATA_DIR, outName);
-          cp.execSync('ffmpeg -y -f concat -safe 0 -i "' + concatList + '" -c copy "' + outPath + '"', { timeout: 120000 });
-          fs.unlinkSync(concatList);
-          if (fs.existsSync(outPath)) {
+        if (segNodes.length > 1) {
+          var clipNode = 'stitch_' + Date.now().toString(36);
+          var clipArgs = ['node', 'create', clipNode, '-t', 'video-clip'];
+          for (var sni = 0; sni < segNodes.length; sni++) {
+            clipArgs.push('--left-add', segNodes[sni]);
+          }
+          clipArgs.push('-r');
+          await libtvExec(clipArgs);
+          var clipData = await libtvPollNode(clipNode, 600);
+          var clipUrl = clipData.data && clipData.data.url && clipData.data.url[0];
+          if (clipUrl) {
+            var clipResp = await fetch(clipUrl);
+            var clipBuf = Buffer.from(await clipResp.arrayBuffer());
+            var clipName = 'stitched_' + Date.now().toString(36) + '.mp4';
+            fs.writeFileSync(path.join(DATA_DIR, clipName), clipBuf);
             l2 = loadTeamTasks(); i2 = l2.findIndex(function(t) { return t._id === task._id; });
-            if (i2 >= 0) { l2[i2].stitchedVideoUrl = '/api/file/' + outName; saveTeamTasks(l2); }
+            if (i2 >= 0) { l2[i2].stitchedVideoUrl = '/api/file/' + clipName; saveTeamTasks(l2); }
           }
         }
-      } catch(e) { /* stitcher failure not fatal */ }
+      } catch(e) { /* stitcher failure */ }
     })();
     setProgress('stitcher', 'done');
 
