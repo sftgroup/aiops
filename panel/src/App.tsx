@@ -10,6 +10,7 @@ import AccountsPage from './pages/AccountsPage';
 import SettingsPage from './pages/SettingsPage';
 import VideoPage from './pages/VideoPage';
 import WorkflowPage from './pages/WorkflowPage';
+import TeamWorkflowPage from './pages/TeamWorkflowPage';
 import Layout from './components/Layout';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -34,6 +35,7 @@ export default function App() {
             <Route path="accounts" element={<AccountsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="workflows" element={<WorkflowPage />} />
+            <Route path="team-workflow" element={<TeamWorkflowPage />} />
           </Route>
         </Routes>
       </AuthProvider>

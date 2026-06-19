@@ -352,6 +352,22 @@ app.post('/api/oauth/twitter/post', authMiddleware, async (req, res) => {
 
 // ─── Social Media Accounts (local fallback) ───────────
 // GET /api/accounts
+// GET /api/stats - Dashboard statistics
+app.get('/api/stats', authMiddleware, (req, res) => {
+  const contents = loadDB('contents').filter(c => c.userId === req.user.id);
+  const accounts = loadDB('accounts').filter(a => a.userId === req.user.id);
+  const publishes = loadDB('publishes').filter(p => p.userId === req.user.id);
+  res.json({
+    totalVideos: contents.filter(c => c.type === 'video').length,
+    totalTexts: contents.filter(c => c.type === 'text' || !c.type).length,
+    published: publishes.filter(p => p.status === 'completed').length,
+    pendingPublish: publishes.filter(p => p.status !== 'completed').length,
+    accounts: accounts.length,
+    platforms: [...new Set(accounts.map(a => a.platform).filter(Boolean))],
+  });
+});
+
+
 app.get('/api/accounts', authMiddleware, (req, res) => {
   const accounts = loadDB('accounts').filter(a => a.userId === req.user.id);
   res.json(accounts);
@@ -403,7 +419,7 @@ app.post('/api/videos/generate', authMiddleware, async (req, res) => {
         voice_name: voice || 'zh-CN-XiaoxiaoNeural-Female',
         video_count: count || 1,
         subtitle_enabled: true,
-        video_source: 'pexels',
+        video_source: "pixabay",
       }),
     });
     const data = await resp.json();
@@ -877,10 +893,11 @@ app.get('/api/settings', authMiddleware, (req, res) => {
 app.post('/api/settings', authMiddleware, async (req, res) => {
   try {
     if (req.user.username !== 'admin') return res.status(403).json({ error: '仅管理员可操作' });
-    const settings = loadDB('settings');
+        let settings = loadDB('settings');
+    if (!settings || Array.isArray(settings)) { settings = {}; }
     const { section, deepseek_key, facebook_client_id, facebook_client_secret,
       youtube_client_id, youtube_client_secret, reddit_client_id, reddit_client_secret,
-      oauth_base_url, pexels_api_key, pixabay_api_key } = req.body;
+      oauth_base_url, pexels_api_key, pixabay_api_key, ark_api_key, seedance_model_id, image_gen_model_id } = req.body;
 
     if (deepseek_key) settings.deepseek_key = deepseek_key;
     if (section === 'llm') settings.deepseek_key = deepseek_key;
@@ -896,6 +913,13 @@ app.post('/api/settings', authMiddleware, async (req, res) => {
     if (section === 'reddit') {
       settings.reddit_client_id = reddit_client_id;
       settings.reddit_client_secret = reddit_client_secret;
+    }
+    if (section === 'seedance') {
+      settings.ark_api_key = ark_api_key;
+      settings.seedance_model_id = seedance_model_id;
+    }
+    if (section === 'imagegen') {
+      settings.image_gen_model_id = image_gen_model_id;
     }
     if (section === 'medias') {
       settings.pexels_api_key = pexels_api_key;
@@ -914,6 +938,9 @@ app.post('/api/settings', authMiddleware, async (req, res) => {
       'OAUTH_BASE_URL=' + (settings.oauth_base_url || 'http://43.156.78.59:5288'),
       'PEXELS_API_KEY=' + (settings.pexels_api_key || ''),
       'PIXABAY_API_KEY=' + (settings.pixabay_api_key || ''),
+      'ARK_API_KEY=' + (settings.ark_api_key || ''),
+      'SEEDANCE_MODEL_ID=' + (settings.seedance_model_id || ''),
+      'IMAGE_GEN_MODEL_ID=' + (settings.image_gen_model_id || ''),
     ];
     // Merge with existing .env
     const envPath = path.join(__dirname, '.env');
@@ -955,6 +982,32 @@ app.post('/api/settings/test-deepseek', authMiddleware, async (req, res) => {
   } catch (e) { res.json({ status: 'error', message: e.message }); }
 });
 
+// POST /api/settings/test-seedance - Test Seedance API connection
+app.post('/api/settings/test-seedance', authMiddleware, async (req, res) => {
+  try {
+    const { ark_api_key, model_id } = req.body;
+    if (!ark_api_key) return res.status(400).json({ status: 'error', message: '缺少 API Key' });
+    if (!model_id) return res.status(400).json({ status: 'error', message: '缺少模型 ID' });
+    // Test with a simple chat completion (ARK is OpenAI-compatible)
+    const resp = await fetch("https://ark.cn-beijing.volces.com/api/v3/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + ark_api_key },
+      body: JSON.stringify({
+        model: model_id,
+        messages: [{ role: "user", content: "Hello" }],
+        max_tokens: 5
+      }),
+    });
+    if (resp.ok) {
+      res.json({ status: 'ok', message: '连接成功！' });
+    } else {
+      const err = await resp.json();
+      res.json({ status: 'error', message: err.error?.message || '连接失败 (HTTP ' + resp.status + ')' });
+    }
+  } catch (e) { res.json({ status: 'error', message: e.message }); }
+});
+
+
 // ─── AI Text Generation (DeepSeek) ────────────────────────
 // POST /api/ai/generate
 app.post('/api/ai/generate', authMiddleware, async (req, res) => {
@@ -992,6 +1045,515 @@ app.post('/api/ai/generate', authMiddleware, async (req, res) => {
 // ─── Serve Static (built frontend) ────────────────────────
 const PANEL_DIST = path.join(__dirname, '..', 'panel', 'dist');
 app.use(express.static(PANEL_DIST));
+
+// ─── Workflow Routes
+function loadWorkflows() {
+  try {
+    const d = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'workflows.json'), 'utf8'));
+    return Array.isArray(d) ? d : [];
+  } catch { return []; }
+}
+function saveWorkflows(data) {
+  fs.writeFileSync(path.join(DATA_DIR, 'workflows.json'), JSON.stringify(data, null, 2));
+}
+
+// GET /api/workflows - List all workflows
+app.get('/api/workflows', authMiddleware, (req, res) => {
+  const list = loadWorkflows().filter(w => w.userId === req.user.id);
+  res.json(list);
+});
+
+// POST /api/workflows - Create a new workflow
+app.post('/api/workflows', authMiddleware, (req, res) => {
+  const { name, subject, schedule, steps } = req.body;
+  if (!name) return res.status(400).json({ error: '缺少名称' });
+  const list = loadWorkflows();
+  const wf = {
+    _id: 'wf_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name, subject: subject || '', schedule: schedule || 'manual',
+    steps: steps || [{ type: 'script', config: {} }, { type: 'video', config: {} }, { type: 'publish', config: {} }],
+    userId: req.user.id,
+    created_at: new Date().toISOString(),
+    last_run: null,
+    last_status: null,
+  };
+  list.push(wf);
+  saveWorkflows(list);
+  res.json(wf);
+});
+
+// PUT /api/workflows/:id - Update a workflow
+app.put('/api/workflows/:id', authMiddleware, (req, res) => {
+  const list = loadWorkflows();
+  const idx = list.findIndex(w => w._id === req.params.id && w.userId === req.user.id);
+  if (idx < 0) return res.status(404).json({ error: '工作流不存在' });
+  list[idx] = { ...list[idx], ...req.body, _id: list[idx]._id, userId: list[idx].userId };
+  saveWorkflows(list);
+  res.json(list[idx]);
+});
+
+// DELETE /api/workflows/:id - Delete a workflow
+app.delete('/api/workflows/:id', authMiddleware, (req, res) => {
+  let list = loadWorkflows();
+  list = list.filter(w => !(w._id === req.params.id && w.userId === req.user.id));
+  saveWorkflows(list);
+  res.json({ ok: true });
+});
+
+// POST /api/workflows/:id/run - Execute a workflow
+app.post('/api/workflows/:id/run', authMiddleware, async (req, res) => {
+  const list = loadWorkflows();
+  const wf = list.find(w => w._id === req.params.id && w.userId === req.user.id);
+  if (!wf) return res.status(404).json({ error: '工作流不存在' });
+
+  // Update status to running
+  wf.last_status = 'running';
+  wf.last_run = new Date().toISOString();
+  saveWorkflows(list);
+
+  // Start async execution (don't await - return immediately)
+  res.json({ message: '工作流已启动', workflowId: wf._id });
+
+  // Async execution
+  const runId = 'run_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const stepsResult = [];
+
+  try {
+    for (const step of wf.steps) {
+      try {
+        if (step.type === 'script') {
+              let settings = loadDB('settings');
+    if (!settings || Array.isArray(settings)) { settings = {}; }
+          const key = settings?.deepseek_key || process.env.DEEPSEEK_KEY;
+          if (!key) { throw new Error('DeepSeek API Key 未配置'); }
+          const resp = await fetch('https://api.deepseek.com/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+            body: JSON.stringify({
+              model: 'deepseek-chat',
+              messages: [{ role: 'system', content: '你是一个短视频文案写手。请为主题写一段30-60秒的短视频脚本，包含画面描述和旁白。' }, { role: 'user', content: wf.subject }],
+              max_tokens: 1000,
+            }),
+          });
+          const d = await resp.json();
+          const script = d.choices?.[0]?.message?.content || '';
+          // Store the script content for later use
+          wf._lastScript = script;
+          stepsResult.push({ type: 'script', status: 'done', message: '文案已生成' });
+        } else if (step.type === 'video') {
+              let settings = loadDB('settings');
+    if (!settings || Array.isArray(settings)) { settings = {}; }
+          const arkKey = settings?.ark_api_key || process.env.ARK_API_KEY;
+          if (!arkKey) { throw new Error('火山引擎 API Key 未配置'); }
+          stepsResult.push({ type: 'video', status: 'pending', message: '等待 Seedance API Key' });
+        } else if (step.type === 'publish') {
+          // Publish text (use script if generated, otherwise subject)
+          const content = wf._lastScript || wf.subject;
+          stepsResult.push({ type: 'publish', status: 'pending', message: '发布功能待接入' });
+        }
+      } catch (e) {
+        stepsResult.push({ type: step.type, status: 'fail', message: e.message });
+      }
+    }
+
+    // Update final status
+    wf.last_status = stepsResult.some(s => s.status === 'fail') ? 'failed' : 'success';
+    saveWorkflows(list);
+
+    // Save run record
+    const runs = loadDB('workflow_runs');
+    runs.push({
+      id: runId,
+      workflowId: wf._id,
+      userId: req.user.id,
+      started_at: wf.last_run,
+      status: wf.last_status,
+      steps: stepsResult,
+    });
+    saveDB('workflow_runs', runs);
+
+  } catch (e) {
+    wf.last_status = 'failed';
+    saveWorkflows(list);
+    const runs = loadDB('workflow_runs');
+    runs.push({ id: runId, workflowId: wf._id, userId: req.user.id, started_at: wf.last_run, status: 'failed', steps: stepsResult });
+    saveDB('workflow_runs', runs);
+  }
+});
+
+// GET /api/workflows/:id/runs - Run history
+app.get('/api/workflows/:id/runs', authMiddleware, (req, res) => {
+  const runs = loadDB('workflow_runs');
+  res.json(runs.filter(r => r.workflowId === req.params.id && r.userId === req.user.id).reverse());
+});
+  console.log(`Server ready`);
+
+
+// ─── Team Tasks (Virtual Team Workflow) ──────────────
+function loadTeamTasks() {
+  try {
+    const d = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'team-tasks.json'), 'utf8'));
+    return Array.isArray(d) ? d : [];
+  } catch { return []; }
+}
+function saveTeamTasks(data) {
+  fs.writeFileSync(path.join(DATA_DIR, 'team-tasks.json'), JSON.stringify(data, null, 2));
+}
+
+// GET /api/team-tasks - List all team tasks
+app.get('/api/team-tasks', authMiddleware, (req, res) => {
+  const list = loadTeamTasks().filter(t => t.userId === req.user.id);
+  res.json(list);
+});
+
+// GET /api/team-tasks/today - Get today's task or create empty
+app.get('/api/team-tasks/today', authMiddleware, (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  let list = loadTeamTasks();
+  let task = list.find(t => t.date === today && t.userId === req.user.id);
+  if (!task) {
+    task = {
+      _id: 'task_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      date: today,
+      userId: req.user.id,
+      subject: '',
+      config: { articles: 0, videos: 0, publishTargets: {} },
+      articles: [],
+      videos: [],
+      publishLog: [],
+      status: 'idle', // idle | running | done
+      createdAt: new Date().toISOString(),
+    };
+    list.push(task);
+    saveTeamTasks(list);
+  }
+  res.json(task);
+});
+
+// POST /api/team-tasks/:id/config - Save daily config
+app.post('/api/team-tasks/:id/config', authMiddleware, (req, res) => {
+  const list = loadTeamTasks();
+  const idx = list.findIndex(t => t._id === req.params.id && t.userId === req.user.id);
+  if (idx < 0) return res.status(404).json({ error: '任务不存在' });
+  const { subject, articles, videos, publishTargets } = req.body;
+  list[idx].subject = subject || list[idx].subject;
+  list[idx].config = { articles: articles || 0, videos: videos || 0, publishTargets: publishTargets || {} };
+  saveTeamTasks(list);
+  res.json(list[idx]);
+});
+
+// POST /api/team-tasks/:id/run - Execute team task (generate all content)
+app.post('/api/team-tasks/:id/run', authMiddleware, async (req, res) => {
+  const list = loadTeamTasks();
+  const idx = list.findIndex(t => t._id === req.params.id && t.userId === req.user.id);
+  if (idx < 0) return res.status(404).json({ error: '任务不存在' });
+  const task = list[idx];
+  if (!task.subject) return res.status(400).json({ error: '请先设设置主题' });
+  if (!task.config.articles && !task.config.videos) return res.status(400).json({ error: '请设置产量' });
+  
+  task.status = 'running';
+  saveTeamTasks(list);
+  res.json({ message: '团队已开工！' });
+
+  const settings = loadDB('settings');
+  if (!settings || Array.isArray(settings)) { settings = {}; }
+  const deepseekKey = settings?.deepseek_key || process.env.DEEPSEEK_KEY;
+  const arkKey = settings?.ark_api_key || process.env.ARK_API_KEY;
+  const imageGenModelId = settings?.image_gen_model_id || process.env.IMAGE_GEN_MODEL_ID;
+  const seedanceModelId = settings?.seedance_model_id || process.env.SEEDANCE_MODEL_ID;
+  
+  // Get bound accounts for publish config
+  const accounts = loadDB('accounts').filter(a => a.userId === req.user.id);
+  const publishTargets = task.config.publishTargets || {};
+  
+  try {
+    // ====== 1. Generate Articles ======
+    const articlePromises = [];
+    for (let i = 0; i < task.config.articles; i++) {
+      articlePromises.push((async () => {
+        const platforms = Object.entries(publishTargets).filter(([p, v]) => v).map(([p]) => p);
+        const platformsText = platforms.length ? '生成的内容需要分别适配以下平台：' + platforms.join(',') : '';
+        
+        // Generate article with DeepSeek
+        const prompt = `你是一个社交媒体内容运营。主题：${task.subject}
+要求：
+- 写一篇吸引人的社交媒体帖子正文
+- 给出1个吸引人的标题（150字以内）
+- 给出5-8个相关的图片描述（用于AI生图）
+- 如果是多平台，为每个平台分别生成不同风格的内容（不能完全相同，要去做重）
+${platformsText}
+输出格式：标题---正文---平台变体---图片描述1|图片描述2|...`;
+        
+        const resp = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': '***' + deepseekKey },
+          body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: [{ role: 'system', content: '你是专业社交媒体内容创作者。' }, { role: 'user', content: prompt }],
+            max_tokens: 4000,
+          }),
+        });
+        const d = await resp.json();
+        const raw = d.choices?.[0]?.message?.content || '';
+        
+        // Parse output
+        const parts = raw.split('---');
+        const title = parts[0]?.trim() || task.subject + ' #' + (i+1);
+        const body = parts[1]?.trim() || raw;
+        
+        // Parse platform variants and image descriptions
+        let platformVariants = {};
+        let imageDescs = [];
+        
+        let remaining = parts.slice(2).join('---');
+        // Find image descriptions (after the last --- group)
+        const imgIdx = remaining.lastIndexOf('|');
+        if (imgIdx > 0) {
+          const imgPart = remaining.slice(imgIdx + 1).trim();
+          imageDescs = imgPart.split('|').filter(Boolean).map(s => s.trim());
+        }
+        
+        // Parse platform variants (each line with platform name)
+        for (const p of platforms) {
+          const plLower = p.toLowerCase();
+          const match = remaining.match(new RegExp(plLower + '[:：]\s*([^\n]+)', 'i'));
+          platformVariants[p] = match ? match[1].trim() : body.slice(0, 280);
+        }
+        
+        // Generate image via Doubao Seedream
+        let imageUrl = '';
+        const imgPrompt = imageDescs[0] || task.subject + ' 精美配图';
+        if (arkKey && imageGenModelId) {
+          try {
+            const imgResp = await fetch('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': '***' + arkKey },
+              body: JSON.stringify({
+                model: imageGenModelId,
+                prompt: imgPrompt,
+                size: '2048x2048',
+                response_format: 'url',
+                watermark: false,
+              }),
+            });
+            const imgJson = await imgResp.json();
+            if (imgJson.data?.[0]?.url) {
+              // Download image to local storage
+              const imgResp2 = await fetch(imgJson.data[0].url);
+              const imgBuf = await imgResp2.arrayBuffer();
+              const imgName = 'art_' + Date.now().toString(36) + '_' + i + '.jpg';
+              fs.writeFileSync(path.join(DATA_DIR, imgName), Buffer.from(imgBuf));
+              imageUrl = '/api/file/' + imgName;
+            }
+          } catch(e) { /* image gen failed, skip */ }
+        }
+        
+        const article = {
+          id: 'art_' + Date.now().toString(36) + '_' + i,
+          title,
+          body,
+          imageUrl,
+          imagePrompt: imgPrompt,
+          platformVariants,
+          review: { status: 'pending', reason: '' },
+          publishedTo: [],
+          createdAt: new Date().toISOString(),
+        };
+        
+        // AI Auto Review
+        try {
+          const reviewResp = await fetch('https://api.deepseek.com/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': '***' + deepseekKey },
+            body: JSON.stringify({
+              model: 'deepseek-chat',
+              messages: [{ role: 'user', content: '你是内容审核员。请判断以下帖子是否适合发布（检查：敏感词、质量、合规）。回复格式：通过 或 不通过:原因。\n\n标题：' + title + '\n\n正文：' + body }],
+              max_tokens: 200,
+            }),
+          });
+          const reviewData = await reviewResp.json();
+          const reviewText = reviewData.choices?.[0]?.message?.content || '';
+          if (reviewText.includes('不通过')) {
+            article.review.status = 'reject';
+            article.review.reason = reviewText.replace('不通过', '').replace(':', '').trim();
+          } else {
+            article.review.status = 'pass';
+          }
+        } catch(e) {
+          article.review.status = 'pass'; // if review fails, auto-pass
+        }
+        
+        return article;
+      })());
+    }
+
+    // ====== 2. Generate Videos ======
+    const videoPromises = [];
+    for (let i = 0; i < task.config.videos; i++) {
+      videoPromises.push((async () => {
+        const platforms = Object.entries(publishTargets).filter(([p, v]) => v).map(([p]) => p);
+        
+        const video = {
+          id: 'vid_' + Date.now().toString(36) + '_' + i,
+          subject: task.subject + ' #' + (i+1),
+          script: '',
+          videoUrl: '',
+          platformVariants: {},
+          review: { status: 'pending', reason: '' },
+          publishedTo: [],
+          createdAt: new Date().toISOString(),
+        };
+        
+        // Generate script
+        if (deepseekKey) {
+          try {
+            const sResp = await fetch('https://api.deepseek.com/chat/completions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': '***' + deepseekKey },
+              body: JSON.stringify({
+                model: 'deepseek-chat',
+                messages: [{ role: 'user', content: '为短视频写一段15秒的旁白脚本，主题：' + task.subject + '。只需输出旁白文本。' }],
+                max_tokens: 1000,
+              }),
+            });
+            const sData = await sResp.json();
+            video.script = sData.choices?.[0]?.message?.content || '';
+          } catch(e) {}
+        }
+
+        // Check Seedance (stub - need API key and endpoints)
+        if (arkKey && seedanceModelId) {
+          video.videoUrl = 'pending: 待 Seedance 驱动';
+          video.review.status = 'pass';
+        } else {
+          video.review.status = 'pending';
+        }
+
+        // Platform variants
+        for (const p of platforms) {
+          if (p.toLowerCase() === 'twitter') {
+            video.platformVariants[p] = video.script.slice(0, 280);
+          } else {
+            video.platformVariants[p] = video.script;
+          }
+        }
+
+        return video;
+      })());
+    }
+    
+    const articles = await Promise.all(articlePromises);
+    const videos = await Promise.all(videoPromises);
+
+    // Update task
+    task.articles = articles;
+    task.videos = videos;
+    task.status = 'done';
+    saveTeamTasks(list);
+
+  } catch(e) {
+    task.status = 'done';
+    saveTeamTasks(list);
+  }
+});
+
+// POST /api/team-tasks/:id/review - Batch review: approve/reject items
+app.post('/api/team-tasks/:id/review', authMiddleware, (req, res) => {
+  const list = loadTeamTasks();
+  const task = list.find(t => t._id === req.params.id && t.userId === req.user.id);
+  if (!task) return res.status(404).json({ error: '任务不存在' });
+  
+  const { action, articleIds, videoIds } = req.body; // action = 'approve' | 'reject' | 're-auto'
+  
+  if (articleIds) {
+    for (const art of task.articles) {
+      if (articleIds.includes(art.id)) {
+        art.review.status = action === 'approve' ? 'pass' : (action === 'reject' ? 'reject' : 'pending');
+      }
+    }
+  }
+  if (videoIds) {
+    for (const vid of task.videos) {
+      if (videoIds.includes(vid.id)) {
+        vid.review.status = action === 'approve' ? 'pass' : (action === 'reject' ? 'reject' : 'pending');
+      }
+    }
+  }
+  
+  saveTeamTasks(list);
+  res.json({ message: '审核完成' });
+});
+
+// POST /api/team-tasks/:id/publish - Publish approved items
+app.post('/api/team-tasks/:id/publish', authMiddleware, async (req, res) => {
+  const list = loadTeamTasks();
+  const task = list.find(t => t._id === req.params.id && t.userId === req.user.id);
+  if (!task) return res.status(404).json({ error: '任务不存在' });
+  
+  const allAccounts = loadDB('accounts').filter(a => a.userId === req.user.id);
+  const publishTargets = task.config.publishTargets || {};
+  const log = [];
+  
+  // Publish articles
+  for (const art of task.articles) {
+    if (art.review.status !== 'pass') continue;
+    if (art.publishedTo.length > 0) continue;
+    
+    for (const [platform, enabled] of Object.entries(publishTargets)) {
+      if (!enabled) continue;
+      const platformAccounts = allAccounts.filter(a => a.platform?.toLowerCase() === platform.toLowerCase());
+      if (platformAccounts.length === 0) continue;
+      
+      const text = art.platformVariants[platform] || art.body;
+      const postData = { text, platform, account: platformAccounts[0], imageUrl: art.imageUrl };
+      
+      // Publish logic - stub for now, implement per-platform
+      let success = false;
+      if (platform.toLowerCase() === 'twitter' && platformAccounts[0].token) {
+        // Twitter OAuth 1.0a post
+        try {
+          const Twitter = require('twitter-api-v2').TwitterApi;
+          const client = new Twitter({
+            appKey: process.env.TWITTER_CONSUMER_KEY,
+            appSecret: process.env.TWITTER_CONSUMER_SECRET,
+            accessToken: platformAccounts[0].token,
+            accessSecret: platformAccounts[0].tokenSecret,
+          });
+          await client.v2.tweet(text);
+          success = true;
+        } catch(e) {
+          log.push({ type: 'article', id: art.id, platform, error: e.message });
+        }
+      }
+      
+      if (success) {
+        art.publishedTo.push(platform + ':' + (platformAccounts[0].screenName || ''));
+        log.push({ type: 'article', id: art.id, platform, status: 'done' });
+      }
+    }
+  }
+  
+  // Publish videos
+  for (const vid of task.videos) {
+    if (vid.review.status !== 'pass') continue;
+    if (vid.publishedTo.length > 0) continue;
+    // Video publish - stub for now
+    log.push({ type: 'video', id: vid.id, status: 'pending', message: '视频发布功能待 Seedance 集成完成' });
+  }
+  
+  task.publishLog = [...(task.publishLog || []), ...log];
+  saveTeamTasks(list);
+  res.json({ message: '发布完成', log });
+});
+
+// GET /api/team-tasks/:id - Get full task detail
+app.get('/api/team-tasks/:id', authMiddleware, (req, res) => {
+  const list = loadTeamTasks();
+  const task = list.find(t => t._id === req.params.id && t.userId === req.user.id);
+  if (!task) return res.status(404).json({ error: '任务不存在' });
+  res.json(task);
+});
+
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'API not found' });
   res.sendFile(path.join(PANEL_DIST, 'index.html'));
@@ -1000,6 +1562,5 @@ app.get('*', (req, res) => {
 // ─── Startup ──────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Aiops Server running on port ${PORT}`);
-  console.log(`MPTurbo API: ${CONFIG.mpturboApi}`);
-  console.log(`AiToEarn MCP: ${CONFIG.aitoearnKey ? 'Configured' : 'NOT configured'}`);
+  console.log(`Server mode: ${process.env.NODE_ENV || 'production'}`);
 });

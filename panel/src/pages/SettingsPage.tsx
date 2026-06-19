@@ -16,6 +16,7 @@ interface Config {
   pixabay_api_key: string;
   ark_api_key: string;
   seedance_model_id: string;
+  image_gen_model_id: string;
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -31,6 +32,7 @@ const DEFAULT_CONFIG: Config = {
   pixabay_api_key: '',
   ark_api_key: '',
   seedance_model_id: '',
+  image_gen_model_id: '',
 };
 
 const OAUTH_HELP = {
@@ -116,6 +118,7 @@ export default function SettingsPage() {
     youtube: '保存 YouTube 配置',
     reddit: '保存 Reddit 配置',
     oauth: '保存回调地址',
+    imagegen: '保存图片生成配置',
     medias: '保存素材 API',
   };
 
@@ -175,6 +178,23 @@ export default function SettingsPage() {
               <ExternalLink size={12} /> 打开火山引擎方舟
             </a>
           </div>
+        </ConfigCard>
+
+        {/* Image Generation */}
+        <ConfigCard title="🖼️ AI 图片生成 (Doubao Seedream)" desc="豆包文生图模型，为文案自动生成配图。同用火山引擎方舟">
+          <ConfigRow label="图片生成模型接入点 ID">
+            <div className="flex gap-2">
+              <input type="text" value={config.image_gen_model_id} onChange={set('image_gen_model_id')}
+                placeholder="ep-xxx（用 doubao-seedream 创建的接入点）" className="flex-1 px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm" />
+              <button onClick={() => saveSection('imagegen', { image_gen_model_id: config.image_gen_model_id })} disabled={saving === 'imagegen'}
+                className="px-4 py-2 bg-accent-primary/50 rounded-lg text-sm hover:bg-accent-primary/70 disabled:opacity-50">
+                {saving === 'imagegen' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              </button>
+            </div>
+          </ConfigRow>
+          <p className="text-xs text-gray-500 mt-2">
+            💡 ARK_API_KEY 共用 Seedance 的同一个 Key。模型推荐：<code className="text-blue-400">doubao-seedream-5-0-260128</code>
+          </p>
         </ConfigCard>
 
         {/* Facebook */}
