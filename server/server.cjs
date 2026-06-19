@@ -1200,6 +1200,19 @@ function saveTeamTasks(data) {
   fs.writeFileSync(path.join(DATA_DIR, 'team-tasks.json'), JSON.stringify(data, null, 2));
 }
 
+function updateTeamProgress(taskId, employee, statusStr) {
+  try {
+    const l = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'team-tasks.json'), 'utf8'));
+    if (!Array.isArray(l)) return;
+    const idx = l.findIndex(t => t._id === taskId);
+    if (idx >= 0) {
+      if (!l[idx].progress) l[idx].progress = { copywriter: 'idle', imagegen: 'idle', videomaker: 'idle', reviewer: 'idle', publisher: 'idle' };
+      l[idx].progress[employee] = statusStr;
+      fs.writeFileSync(path.join(DATA_DIR, 'team-tasks.json'), JSON.stringify(l, null, 2));
+    }
+  } catch(e) {}
+}
+
 // GET /api/team-tasks - List all team tasks
 app.get('/api/team-tasks', authMiddleware, (req, res) => {
   const list = loadTeamTasks().filter(t => t.userId === req.user.id);
@@ -1217,10 +1230,11 @@ app.get('/api/team-tasks/today', authMiddleware, (req, res) => {
       date: today,
       userId: req.user.id,
       subject: '',
-      config: { articles: 0, videos: 0, publishTargets: {} },
+      config: { articles: 0, videos: 0, publishTargets: {}, publishAccounts: {}, schedule: { publishAt: '', intervalMinutes: 5 } },
       articles: [],
       videos: [],
       publishLog: [],
+      progress: { copywriter: 'idle', imagegen: 'idle', videomaker: 'idle', reviewer: 'idle', publisher: 'idle' },
       status: 'idle', // idle | running | done
       createdAt: new Date().toISOString(),
     };
@@ -1235,9 +1249,9 @@ app.post('/api/team-tasks/:id/config', authMiddleware, (req, res) => {
   const list = loadTeamTasks();
   const idx = list.findIndex(t => t._id === req.params.id && t.userId === req.user.id);
   if (idx < 0) return res.status(404).json({ error: '任务不存在' });
-  const { subject, articles, videos, publishTargets } = req.body;
+  const { subject, articles, videos, publishTargets, publishAccounts, schedule } = req.body;
   list[idx].subject = subject || list[idx].subject;
-  list[idx].config = { articles: articles || 0, videos: videos || 0, publishTargets: publishTargets || {} };
+  list[idx].config = { articles: articles || 0, videos: videos || 0, publishTargets: publishTargets || {}, publishAccounts: publishAccounts || {}, schedule: schedule || { publishAt: '', intervalMinutes: 5 } };
   saveTeamTasks(list);
   res.json(list[idx]);
 });
@@ -1248,10 +1262,15 @@ app.post('/api/team-tasks/:id/run', authMiddleware, async (req, res) => {
   const idx = list.findIndex(t => t._id === req.params.id && t.userId === req.user.id);
   if (idx < 0) return res.status(404).json({ error: '任务不存在' });
   const task = list[idx];
-  if (!task.subject) return res.status(400).json({ error: '请先设设置主题' });
+  if (!task.subject) return res.status(400).json({ error: '请先设置主题' });
   if (!task.config.articles && !task.config.videos) return res.status(400).json({ error: '请设置产量' });
   
   task.status = 'running';
+  // Init progress
+  task.progress = { copywriter: 'pending', imagegen: 'pending', videomaker: 'pending', reviewer: 'pending', publisher: 'pending' };
+  task.articles = [];
+  task.videos = [];
+  task.publishLog = [];
   saveTeamTasks(list);
   res.json({ message: '团队已开工！' });
 
@@ -1261,32 +1280,34 @@ app.post('/api/team-tasks/:id/run', authMiddleware, async (req, res) => {
   const arkKey = settings?.ark_api_key || process.env.ARK_API_KEY;
   const imageGenModelId = settings?.image_gen_model_id || process.env.IMAGE_GEN_MODEL_ID;
   const seedanceModelId = settings?.seedance_model_id || process.env.SEEDANCE_MODEL_ID;
-  
-  // Get bound accounts for publish config
+
+  // Helper: update progress
+  function setProgress(employee, statusStr) {
+    const l2 = loadTeamTasks();
+    const i2 = l2.findIndex(t => t._id === task._id);
+    if (i2 >= 0) { l2[i2].progress[employee] = statusStr; saveTeamTasks(l2); }
+  }
+
   const accounts = loadDB('accounts').filter(a => a.userId === req.user.id);
   const publishTargets = task.config.publishTargets || {};
-  
+
   try {
-    // ====== 1. Generate Articles ======
+    // ====== 1. Copywriter: Generate Articles ======
+    setProgress('copywriter', 'running');
     const articlePromises = [];
     for (let i = 0; i < task.config.articles; i++) {
       articlePromises.push((async () => {
         const platforms = Object.entries(publishTargets).filter(([p, v]) => v).map(([p]) => p);
         const platformsText = platforms.length ? '生成的内容需要分别适配以下平台：' + platforms.join(',') : '';
-        
-        // Generate article with DeepSeek
-        const prompt = `你是一个社交媒体内容运营。主题：${task.subject}
-要求：
-- 写一篇吸引人的社交媒体帖子正文
-- 给出1个吸引人的标题（150字以内）
-- 给出5-8个相关的图片描述（用于AI生图）
-- 如果是多平台，为每个平台分别生成不同风格的内容（不能完全相同，要去做重）
-${platformsText}
-输出格式：标题---正文---平台变体---图片描述1|图片描述2|...`;
-        
+
+        const prompt = '你是一个社交媒体内容运营。主题：' + task.subject +
+'\n要求：\n- 写一篇吸引人的社交媒体帖子正文\n- 给出1个吸引人的标题（150字以内）\n- 给出5-8个相关的图片描述（用于AI生图）\n- 如果是多平台，为每个平台分别生成不同风格的内容（不能完全相同，要去做重）\n' +
+platformsText +
+'\n输出格式：标题---正文---平台变体---图片描述1|图片描述2|...';
+
         const resp = await fetch('https://api.deepseek.com/chat/completions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': '***' + deepseekKey },
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + deepseekKey },
           body: JSON.stringify({
             model: 'deepseek-chat',
             messages: [{ role: 'system', content: '你是专业社交媒体内容创作者。' }, { role: 'user', content: prompt }],
@@ -1295,104 +1316,88 @@ ${platformsText}
         });
         const d = await resp.json();
         const raw = d.choices?.[0]?.message?.content || '';
-        
-        // Parse output
+
         const parts = raw.split('---');
         const title = parts[0]?.trim() || task.subject + ' #' + (i+1);
         const body = parts[1]?.trim() || raw;
-        
-        // Parse platform variants and image descriptions
+
         let platformVariants = {};
         let imageDescs = [];
-        
         let remaining = parts.slice(2).join('---');
-        // Find image descriptions (after the last --- group)
         const imgIdx = remaining.lastIndexOf('|');
         if (imgIdx > 0) {
           const imgPart = remaining.slice(imgIdx + 1).trim();
-          imageDescs = imgPart.split('|').filter(Boolean).map(s => s.trim());
+          imageDescs = imgPart.split('|').filter(Boolean).map(function(s) { return s.trim(); });
         }
-        
-        // Parse platform variants (each line with platform name)
-        for (const p of platforms) {
+        for (let pi = 0; pi < platforms.length; pi++) {
+          const p = platforms[pi];
           const plLower = p.toLowerCase();
-          const match = remaining.match(new RegExp(plLower + '[:：]\s*([^\n]+)', 'i'));
+          const re = new RegExp(plLower + '[:：]\\s*([^\\n]+)', 'i');
+          const match = remaining.match(re);
           platformVariants[p] = match ? match[1].trim() : body.slice(0, 280);
         }
-        
-        // Generate image via Doubao Seedream
-        let imageUrl = '';
-        const imgPrompt = imageDescs[0] || task.subject + ' 精美配图';
-        if (arkKey && imageGenModelId) {
-          try {
-            const imgResp = await fetch('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': '***' + arkKey },
-              body: JSON.stringify({
-                model: imageGenModelId,
-                prompt: imgPrompt,
-                size: '2048x2048',
-                response_format: 'url',
-                watermark: false,
-              }),
-            });
-            const imgJson = await imgResp.json();
-            if (imgJson.data?.[0]?.url) {
-              // Download image to local storage
-              const imgResp2 = await fetch(imgJson.data[0].url);
-              const imgBuf = await imgResp2.arrayBuffer();
-              const imgName = 'art_' + Date.now().toString(36) + '_' + i + '.jpg';
-              fs.writeFileSync(path.join(DATA_DIR, imgName), Buffer.from(imgBuf));
-              imageUrl = '/api/file/' + imgName;
-            }
-          } catch(e) { /* image gen failed, skip */ }
-        }
-        
+
         const article = {
           id: 'art_' + Date.now().toString(36) + '_' + i,
-          title,
-          body,
-          imageUrl,
-          imagePrompt: imgPrompt,
-          platformVariants,
+          title: title,
+          body: body,
+          imageUrl: '',
+          imagePrompt: imageDescs[0] || task.subject + ' 精美配图',
+          platformVariants: platformVariants,
           review: { status: 'pending', reason: '' },
           publishedTo: [],
           createdAt: new Date().toISOString(),
         };
-        
-        // AI Auto Review
-        try {
-          const reviewResp = await fetch('https://api.deepseek.com/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': '***' + deepseekKey },
-            body: JSON.stringify({
-              model: 'deepseek-chat',
-              messages: [{ role: 'user', content: '你是内容审核员。请判断以下帖子是否适合发布（检查：敏感词、质量、合规）。回复格式：通过 或 不通过:原因。\n\n标题：' + title + '\n\n正文：' + body }],
-              max_tokens: 200,
-            }),
-          });
-          const reviewData = await reviewResp.json();
-          const reviewText = reviewData.choices?.[0]?.message?.content || '';
-          if (reviewText.includes('不通过')) {
-            article.review.status = 'reject';
-            article.review.reason = reviewText.replace('不通过', '').replace(':', '').trim();
-          } else {
-            article.review.status = 'pass';
-          }
-        } catch(e) {
-          article.review.status = 'pass'; // if review fails, auto-pass
-        }
-        
+
         return article;
       })());
     }
 
-    // ====== 2. Generate Videos ======
+    const articles = await Promise.all(articlePromises);
+    let l2 = loadTeamTasks();
+    let i2 = l2.findIndex(function(t) { return t._id === task._id; });
+    if (i2 >= 0) { l2[i2].articles = articles; l2[i2].progress.copywriter = 'done'; saveTeamTasks(l2); }
+    setProgress('copywriter', 'done');
+
+    // ====== 2. Imagegen: Generate Images ======
+    setProgress('imagegen', 'running');
+    if (arkKey && imageGenModelId) {
+      for (let i = 0; i < articles.length; i++) {
+        try {
+          const imgResp = await fetch('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + arkKey },
+            body: JSON.stringify({
+              model: imageGenModelId,
+              prompt: articles[i].imagePrompt,
+              size: '2048x2048',
+              response_format: 'url',
+              watermark: false,
+            }),
+          });
+          const imgJson = await imgResp.json();
+          if (imgJson.data?.[0]?.url) {
+            const imgResp2 = await fetch(imgJson.data[0].url);
+            const imgBuf = await imgResp2.arrayBuffer();
+            const imgName = 'art_' + Date.now().toString(36) + '_' + i + '.jpg';
+            fs.writeFileSync(path.join(DATA_DIR, imgName), Buffer.from(imgBuf));
+            articles[i].imageUrl = '/api/file/' + imgName;
+          }
+        } catch(e) { /* skip image gen failure */ }
+
+        // Update incremental progress
+        l2 = loadTeamTasks(); i2 = l2.findIndex(function(t) { return t._id === task._id; });
+        if (i2 >= 0) { l2[i2].articles = articles; saveTeamTasks(l2); }
+      }
+    }
+    setProgress('imagegen', 'done');
+
+    // ====== 3. Videomaker: Generate Videos ======
+    setProgress('videomaker', 'running');
     const videoPromises = [];
     for (let i = 0; i < task.config.videos; i++) {
-      videoPromises.push((async () => {
-        const platforms = Object.entries(publishTargets).filter(([p, v]) => v).map(([p]) => p);
-        
+      videoPromises.push((async function() {
+        const platforms = Object.entries(publishTargets).filter(function(entry) { return entry[1]; }).map(function(entry) { return entry[0]; });
         const video = {
           id: 'vid_' + Date.now().toString(36) + '_' + i,
           subject: task.subject + ' #' + (i+1),
@@ -1403,16 +1408,16 @@ ${platformsText}
           publishedTo: [],
           createdAt: new Date().toISOString(),
         };
-        
-        // Generate script
+
         if (deepseekKey) {
           try {
+            const prompt = '为短视频写一段15秒的旁白脚本，主题：' + task.subject + '。只需输出旁白文本。';
             const sResp = await fetch('https://api.deepseek.com/chat/completions', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': '***' + deepseekKey },
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + deepseekKey },
               body: JSON.stringify({
                 model: 'deepseek-chat',
-                messages: [{ role: 'user', content: '为短视频写一段15秒的旁白脚本，主题：' + task.subject + '。只需输出旁白文本。' }],
+                messages: [{ role: 'user', content: prompt }],
                 max_tokens: 1000,
               }),
             });
@@ -1421,7 +1426,6 @@ ${platformsText}
           } catch(e) {}
         }
 
-        // Check Seedance (stub - need API key and endpoints)
         if (arkKey && seedanceModelId) {
           video.videoUrl = 'pending: 待 Seedance 驱动';
           video.review.status = 'pass';
@@ -1429,34 +1433,68 @@ ${platformsText}
           video.review.status = 'pending';
         }
 
-        // Platform variants
-        for (const p of platforms) {
+        for (let pi = 0; pi < platforms.length; pi++) {
+          const p = platforms[pi];
           if (p.toLowerCase() === 'twitter') {
             video.platformVariants[p] = video.script.slice(0, 280);
           } else {
             video.platformVariants[p] = video.script;
           }
         }
-
         return video;
       })());
     }
-    
-    const articles = await Promise.all(articlePromises);
     const videos = await Promise.all(videoPromises);
+    setProgress('videomaker', 'done');
 
-    // Update task
-    task.articles = articles;
-    task.videos = videos;
-    task.status = 'done';
-    saveTeamTasks(list);
+    // ====== 4. Reviewer: Auto-review all content ======
+    setProgress('reviewer', 'running');
+    for (let i = 0; i < articles.length; i++) {
+      const art = articles[i];
+      try {
+        const reviewResp = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + deepseekKey },
+          body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: [{ role: 'user', content: '你是内容审核员。请判断以下帖子是否适合发布（检查：敏感词、质量、合规）。回复格式：通过 或 不通过:原因。\\n\\n标题：' + art.title + '\\n\\n正文：' + art.body }],
+            max_tokens: 200,
+          }),
+        });
+        const reviewData = await reviewResp.json();
+        const reviewText = reviewData.choices?.[0]?.message?.content || '';
+        if (reviewText.includes('不通过')) {
+          art.review.status = 'reject';
+          art.review.reason = reviewText.replace('不通过', '').replace(':', '').trim();
+        } else {
+          art.review.status = 'pass';
+        }
+      } catch(e) { art.review.status = 'pass'; }
+    }
+    for (let i = 0; i < videos.length; i++) {
+      // Videos that have scripts auto-pass
+      if (videos[i].script) videos[i].review.status = 'pass';
+    }
+    setProgress('reviewer', 'done');
 
+    // ====== Final save ======
+    l2 = loadTeamTasks(); i2 = l2.findIndex(function(t) { return t._id === task._id; });
+    if (i2 >= 0) {
+      l2[i2].articles = articles;
+      l2[i2].videos = videos;
+      l2[i2].status = 'done';
+      l2[i2].progress.copywriter = 'done';
+      l2[i2].progress.imagegen = articles.some(function(a) { return a.imageUrl; }) ? 'done' : 'skip';
+      l2[i2].progress.videomaker = 'done';
+      l2[i2].progress.reviewer = 'done';
+      l2[i2].progress.publisher = 'idle';
+      saveTeamTasks(l2);
+    }
   } catch(e) {
-    task.status = 'done';
-    saveTeamTasks(list);
+    l2 = loadTeamTasks(); i2 = l2.findIndex(function(t) { return t._id === task._id; });
+    if (i2 >= 0) { l2[i2].status = 'done'; saveTeamTasks(l2); }
   }
 });
-
 // POST /api/team-tasks/:id/review - Batch review: approve/reject items
 app.post('/api/team-tasks/:id/review', authMiddleware, (req, res) => {
   const list = loadTeamTasks();
@@ -1484,66 +1522,194 @@ app.post('/api/team-tasks/:id/review', authMiddleware, (req, res) => {
   res.json({ message: '审核完成' });
 });
 
-// POST /api/team-tasks/:id/publish - Publish approved items
+// POST /api/team-tasks/:id/publish - Publish approved items with per-account + time staggering
 app.post('/api/team-tasks/:id/publish', authMiddleware, async (req, res) => {
   const list = loadTeamTasks();
   const task = list.find(t => t._id === req.params.id && t.userId === req.user.id);
   if (!task) return res.status(404).json({ error: '任务不存在' });
-  
+
   const allAccounts = loadDB('accounts').filter(a => a.userId === req.user.id);
   const publishTargets = task.config.publishTargets || {};
+  const publishAccounts = task.config.publishAccounts || {};
+  const schedule = task.config.schedule || { publishAt: '', intervalMinutes: 5 };
   const log = [];
-  
-  // Publish articles
+
+  // Resolve selected accounts per platform
+  const selectedAccountIds = new Set();
+  for (const [platform, enabled] of Object.entries(publishTargets)) {
+    if (!enabled) continue;
+    if (publishAccounts[platform] && Array.isArray(publishAccounts[platform])) {
+      publishAccounts[platform].forEach(function(id) { selectedAccountIds.add(id); });
+    }
+  }
+
+  // Build ordered publish queue: [ {type, item, platform, account, text, i}, ... ]
+  let queue = [];
+  let overallIdx = 0;
+
+  // Collect articles
   for (const art of task.articles) {
     if (art.review.status !== 'pass') continue;
-    if (art.publishedTo.length > 0) continue;
-    
+    const already = new Set(art.publishedTo || []);
     for (const [platform, enabled] of Object.entries(publishTargets)) {
       if (!enabled) continue;
-      const platformAccounts = allAccounts.filter(a => a.platform?.toLowerCase() === platform.toLowerCase());
-      if (platformAccounts.length === 0) continue;
-      
-      const text = art.platformVariants[platform] || art.body;
-      const postData = { text, platform, account: platformAccounts[0], imageUrl: art.imageUrl };
-      
-      // Publish logic - stub for now, implement per-platform
-      let success = false;
-      if (platform.toLowerCase() === 'twitter' && platformAccounts[0].token) {
-        // Twitter OAuth 1.0a post
-        try {
-          const Twitter = require('twitter-api-v2').TwitterApi;
-          const client = new Twitter({
-            appKey: process.env.TWITTER_CONSUMER_KEY,
-            appSecret: process.env.TWITTER_CONSUMER_SECRET,
-            accessToken: platformAccounts[0].token,
-            accessSecret: platformAccounts[0].tokenSecret,
-          });
-          await client.v2.tweet(text);
-          success = true;
-        } catch(e) {
-          log.push({ type: 'article', id: art.id, platform, error: e.message });
-        }
+      let platformAccounts = allAccounts.filter(function(a) { return a.platform?.toLowerCase() === platform.toLowerCase(); });
+      // If per-account selection is active, filter to selected
+      if (publishAccounts[platform] && publishAccounts[platform].length > 0) {
+        platformAccounts = platformAccounts.filter(function(a) { return publishAccounts[platform].indexOf(a._id || a.id) >= 0; });
       }
-      
-      if (success) {
-        art.publishedTo.push(platform + ':' + (platformAccounts[0].screenName || ''));
-        log.push({ type: 'article', id: art.id, platform, status: 'done' });
+      for (const account of platformAccounts) {
+        const key = platform + ':' + (account.screenName || account.username || account.id);
+        if (already.has(key)) continue;
+        const text = art.platformVariants[platform] || art.body;
+        // Truncate for Twitter
+        const finalText = platform.toLowerCase() === 'twitter' && text.length > 280 ? text.slice(0, 277) + '...' : text;
+        queue.push({ type: 'article', item: art, platform: platform, account: account, text: finalText, imageUrl: art.imageUrl, idx: overallIdx++ });
+      }
+    }
+  }
+
+  // Collect videos
+  for (const vid of task.videos) {
+    if (vid.review.status !== 'pass') continue;
+    const already = new Set(vid.publishedTo || []);
+    for (const [platform, enabled] of Object.entries(publishTargets)) {
+      if (!enabled) continue;
+      let platformAccounts = allAccounts.filter(function(a) { return a.platform?.toLowerCase() === platform.toLowerCase(); });
+      if (publishAccounts[platform] && publishAccounts[platform].length > 0) {
+        platformAccounts = platformAccounts.filter(function(a) { return publishAccounts[platform].indexOf(a._id || a.id) >= 0; });
+      }
+      for (const account of platformAccounts) {
+        const key = platform + ':' + (account.screenName || account.username || account.id);
+        if (already.has(key)) continue;
+        const text = vid.platformVariants[platform] || vid.script;
+        queue.push({ type: 'video', item: vid, platform: platform, account: account, text: text, videoUrl: vid.videoUrl, idx: overallIdx++ });
+      }
+    }
+  }
+
+  // Respond immediately with queue info
+  res.json({ message: '发布队列已构建，共 ' + queue.length + ' 条', total: queue.length });
+
+  // Process queue asynchronously with staggering
+  (async function() {
+    let processedCount = 0;
+    for (let qi = 0; qi < queue.length; qi++) {
+      const entry = queue[qi];
+      let success = false;
+      let errorMsg = '';
+
+      try {
+        if (entry.type === 'article' && entry.platform.toLowerCase() === 'twitter' && entry.account.token) {
+          // Twitter OAuth 1.0a post using oauth-1a library (no twitter-api-v2 dependency)
+          const OAuth = require('oauth-1.0a');
+          const crypto2 = require('crypto');
+          const oauth = OAuth({ consumer: { key: process.env.TWITTER_CONSUMER_KEY, secret: process.env.TWITTER_CONSUMER_SECRET }, signature_method: 'HMAC-SHA1', hash_function: function(base_string, key) { return crypto2.createHmac('sha1', key).update(base_string).digest('base64'); } });
+          const request_data = { url: 'https://api.twitter.com/1.1/statuses/update.json', method: 'POST', data: { status: entry.text }, includeMedia: false };
+          const token = { key: entry.account.token, secret: entry.account.tokenSecret };
+          const authHeader = oauth.toHeader(oauth.authorize(request_data, token));
+
+          // Try with image first
+          let mediaId = '';
+          if (entry.imageUrl) {
+            const imageFilePath = entry.imageUrl.startsWith('/api/file/') ? path.join(DATA_DIR, entry.imageUrl.replace('/api/file/', '')) : '';
+            if (imageFilePath && fs.existsSync(imageFilePath)) {
+              // Upload media via Twitter API
+              const boundary = '----' + Date.now().toString(36);
+              const imgData = fs.readFileSync(imageFilePath);
+              const imgB64 = imgData.toString('base64');
+              const mediaResp = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
+                method: 'POST',
+                headers: { 'Authorization': authHeader['Authorization'], 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ media_data: imgB64 }).toString(),
+              });
+              const mediaJson = await mediaResp.json();
+              if (mediaJson.media_id_string) mediaId = mediaJson.media_id_string;
+            }
+          }
+
+          if (mediaId) {
+            const tweetData = { status: entry.text, media_ids: mediaId };
+            const tweetReq = { url: 'https://api.twitter.com/1.1/statuses/update.json', method: 'POST', data: tweetData };
+            const tweetAuth = oauth.toHeader(oauth.authorize(tweetReq, token));
+            const tweetResp = await fetch('https://api.twitter.com/1.1/statuses/update.json', {
+              method: 'POST',
+              headers: { 'Authorization': tweetAuth['Authorization'], 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams(tweetData).toString(),
+            });
+            success = tweetResp.ok;
+            if (!success) { const te = await tweetResp.json(); errorMsg = te.errors?.[0]?.message || te.title || 'Twitter error'; }
+          } else {
+            const tweetResp = await fetch(request_data.url, {
+              method: 'POST',
+              headers: { 'Authorization': authHeader['Authorization'], 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({ status: entry.text }).toString(),
+            });
+            success = tweetResp.ok;
+            if (!success) { const te = await tweetResp.json(); errorMsg = te.errors?.[0]?.message || te.title || 'Twitter error'; }
+          }
+        } else if (entry.type === 'video') {
+          // Video publish - placeholder
+          errorMsg = '视频发布功能待 Seedance 集成完成';
+        } else {
+          errorMsg = '平台 ' + entry.platform + ' 尚未支持';
+        }
+      } catch(e) { errorMsg = e.message || 'Unknown error'; }
+
+      const pubKey = entry.platform + ':' + (entry.account.screenName || entry.account.username || entry.account.id);
+      const logEntry = { type: entry.type, id: entry.item.id, platform: entry.platform, account: entry.account.screenName || entry.account.username || '', status: success ? 'done' : 'fail', error: errorMsg, timestamp: new Date().toISOString() };
+      log.push(logEntry);
+
+      // Save progress
+      let l2 = loadTeamTasks(); let i2 = l2.findIndex(function(t) { return t._id === task._id; });
+      if (i2 >= 0) {
+        // Mark item as published
+        if (success) {
+          const targetItem = entry.type === 'article' ? l2[i2].articles.find(function(a) { return a.id === entry.item.id; }) : l2[i2].videos.find(function(v) { return v.id === entry.item.id; });
+          if (targetItem && !targetItem.publishedTo.includes(pubKey)) targetItem.publishedTo.push(pubKey);
+        }
+        l2[i2].publishLog = [...(l2[i2].publishLog || []), logEntry];
+        l2[i2].progress.publisher = '发中 ' + (qi + 1) + '/' + queue.length;
+        saveTeamTasks(l2);
+      }
+      processedCount++;
+
+      // Time staggering: wait interval minutes between posts (skip for last item)
+      if (qi < queue.length - 1) {
+        const delayMs = (schedule.intervalMinutes || 5) * 60 * 1000;
+        if (delayMs > 0) await new Promise(function(r) { setTimeout(r, delayMs); });
+      }
+    }
+
+    updateTeamProgress(task._id, 'publisher', 'done');
+  })();
+});
+
+// POST /api/team-tasks/:id/review - Batch review: approve/reject items
+app.post('/api/team-tasks/:id/review', authMiddleware, (req, res) => {
+  const list = loadTeamTasks();
+  const task = list.find(t => t._id === req.params.id && t.userId === req.user.id);
+  if (!task) return res.status(404).json({ error: '任务不存在' });
+  
+  const { action, articleIds, videoIds } = req.body;
+  
+  if (articleIds) {
+    for (const art of task.articles) {
+      if (articleIds.includes(art.id)) {
+        art.review.status = action === 'approve' ? 'pass' : (action === 'reject' ? 'reject' : 'pending');
+      }
+    }
+  }
+  if (videoIds) {
+    for (const vid of task.videos) {
+      if (videoIds.includes(vid.id)) {
+        vid.review.status = action === 'approve' ? 'pass' : (action === 'reject' ? 'reject' : 'pending');
       }
     }
   }
   
-  // Publish videos
-  for (const vid of task.videos) {
-    if (vid.review.status !== 'pass') continue;
-    if (vid.publishedTo.length > 0) continue;
-    // Video publish - stub for now
-    log.push({ type: 'video', id: vid.id, status: 'pending', message: '视频发布功能待 Seedance 集成完成' });
-  }
-  
-  task.publishLog = [...(task.publishLog || []), ...log];
   saveTeamTasks(list);
-  res.json({ message: '发布完成', log });
+  res.json({ message: '审核完成' });
 });
 
 // GET /api/team-tasks/:id - Get full task detail
@@ -1561,6 +1727,5 @@ app.get('*', (req, res) => {
 
 // ─── Startup ──────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Aiops Server running on port ${PORT}`);
-  console.log(`Server mode: ${process.env.NODE_ENV || 'production'}`);
+  console.log("Server ready");
 });
