@@ -155,7 +155,7 @@ export default function VideoPage() {
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-accent-success"></div>
               <span className="text-gray-400">默认模型</span>
-              <span className="ml-auto text-gray-500">Happy Horse 1.0</span>
+              <span className="ml-auto text-gray-500">Seedance 2.0 VIP</span>
             </div>
           </div>
 
@@ -163,7 +163,7 @@ export default function VideoPage() {
 
           <p className="text-xs text-gray-500 leading-relaxed">
             LibTV 是 liblib.tv 的 AI 媒体平台，支持 30+ 个视频生成模型（Happy Horse、Wan、Hailuo、Kling、Seedance 等）。
-            当前使用免费模型 <strong className="text-gray-300">Happy Horse 1.0</strong>（阿里通义万相）。
+            当前使用 <strong className="text-gray-300">Seedance 2.0 VIP</strong>（需 LibTV 会员），支持原始配音和长时生成。
           </p>
           <p className="text-xs text-gray-600 mt-2">
             📌 模型选择请到 <a href="#/settings" className="text-blue-400 hover:underline">系统配置</a> 页面切换。

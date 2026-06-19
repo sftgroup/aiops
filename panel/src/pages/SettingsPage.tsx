@@ -32,7 +32,7 @@ const DEFAULT_CONFIG: Config = {
   pixabay_api_key: '',
   libtv_token: '',
   libtv_image_model: 'Seedream 4.5',
-  libtv_video_model: 'Happy Horse 1.0',
+  libtv_video_model: 'Seedance 2.0 VIP',
 };
 
 const OAUTH_HELP = {

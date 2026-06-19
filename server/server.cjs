@@ -5,6 +5,16 @@ const fs = require('fs');
 const crypto = require('crypto');
 const OAuth = require('oauth-1.0a');
 
+// Load .env file into process.env
+var envPath = path.join(__dirname, '.env');
+try {
+  var envContent = fs.readFileSync(envPath, 'utf8');
+  envContent.split('\n').forEach(function(line) {
+    var m = line.match(/^([^=]+)=(.*)$/);
+    if (m) process.env[m[1].trim()] = m[2].trim();
+  });
+} catch(e) {}
+
 const app = express();
 const PORT = process.env.PORT || 5289;
 const DATA_DIR = path.join(__dirname, '..', 'data');
@@ -19,6 +29,7 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(path.join(DATA_DIR, 'uploads')));
+app.use('/api/file', express.static(DATA_DIR));
 
 // ─── Config ───────────────────────────────────────────────
 const CONFIG = {
@@ -44,6 +55,104 @@ function saveDB(name, data) {
 
 // ─── Helpers ──────────────────────────────────────────────
 function uuid() { return 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, c => {const r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16);}); }
+
+// ─── LibTV CLI Integration ──────────────────────────────
+const LIBTV_PATH = '/home/ubuntu/.libtv/libtv';
+const LIBTV_ENV = Object.assign({}, process.env, { PATH: '/home/ubuntu/.libtv:' + (process.env.PATH || ''), LIBTV_TOKEN: process.env.LIBTV_TOKEN || '' });
+
+function refreshLibtvToken() {
+  try {
+    var s = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'settings.json'), 'utf8'));
+    if (s && s.libtv_token) { LIBTV_ENV.LIBTV_TOKEN = s.libtv_token; process.env.LIBTV_TOKEN = s.libtv_token; }
+  } catch(e) {}
+}
+
+function libtvExec(args) {
+  return new Promise(function(resolve, reject) {
+    const cp = require('child_process');
+    cp.execFile(LIBTV_PATH, args, { env: LIBTV_ENV, maxBuffer: 50 * 1024 * 1024 }, function(err, stdout, stderr) {
+      if (stdout) {
+        try { resolve(JSON.parse(stdout)); } catch(e) { resolve(stdout); }
+      } else {
+        reject(new Error(stderr || (err ? err.message : 'no output')));
+      }
+    });
+  });
+}
+
+let _libtvProject = null;
+function ensureLibtvProject() {
+  if (_libtvProject) return Promise.resolve(_libtvProject);
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  return libtvExec(['project', 'create', 'aiops-' + today]).then(function(r) {
+    _libtvProject = r.projectMeta ? r.projectMeta.uuid : r.uuid;
+    return libtvExec(['project', 'use', _libtvProject]).then(function() { return _libtvProject; });
+  });
+}
+
+function libtvPollNode(nodeName, timeoutSec) {
+  var waited = 0;
+  var interval = 2000;
+  var max = (timeoutSec || 120) * 1000;
+  return new Promise(function(resolve, reject) {
+    function poll() {
+      libtvExec(['node', nodeName]).then(function(node) {
+        if (node.data && node.data.taskInfo && node.data.taskInfo.loading === false) {
+          resolve(node);
+        } else if (waited >= max) {
+          resolve(node);
+        } else {
+          waited += interval;
+          setTimeout(poll, interval);
+        }
+      }).catch(function(err) {
+        if (waited >= max) { reject(err); }
+        else { waited += interval; setTimeout(poll, interval); }
+      });
+    }
+    poll();
+  });
+}
+
+async function libtvGenImage(prompt, modelName) {
+  try {
+    refreshLibtvToken();
+    if (!LIBTV_ENV.LIBTV_TOKEN) return '';
+    await ensureLibtvProject();
+    var nodeName = 'img_' + Date.now().toString(36);
+    await libtvExec(['node', 'create', nodeName, '-t', 'image', '--prompt', prompt, '-s', 'model=' + modelName, '-r']);
+    var node = await libtvPollNode(nodeName, 120);
+    var url = node.data && node.data.url && node.data.url[0];
+    if (url) {
+      var imgResp = await fetch(url);
+      var imgBuf = Buffer.from(await imgResp.arrayBuffer());
+      var imgName = 'libtv_' + Date.now().toString(36) + '.jpg';
+      fs.writeFileSync(path.join(DATA_DIR, imgName), imgBuf);
+      return '/api/file/' + imgName;
+    }
+    return '';
+  } catch(e) { return ''; }
+}
+
+async function libtvGenVideo(prompt, modelName) {
+  try {
+    refreshLibtvToken();
+    if (!LIBTV_ENV.LIBTV_TOKEN) return '';
+    await ensureLibtvProject();
+    var nodeName = 'vid_' + Date.now().toString(36);
+    await libtvExec(['node', 'create', nodeName, '-t', 'video', '--prompt', prompt, '-s', 'model=' + modelName, '-r']);
+    var node = await libtvPollNode(nodeName, 300);
+    var url = node.data && node.data.url && node.data.url[0];
+    if (url) {
+      var vidResp = await fetch(url);
+      var vidBuf = Buffer.from(await vidResp.arrayBuffer());
+      var vidName = 'libtv_' + Date.now().toString(36) + '.mp4';
+      fs.writeFileSync(path.join(DATA_DIR, vidName), vidBuf);
+      return '/api/file/' + vidName;
+    }
+    return url || '';
+  } catch(e) { return ''; }
+}
 
 // ─── Auth ─────────────────────────────────────────────────
 const jwt = require('jsonwebtoken');
@@ -897,7 +1006,7 @@ app.post('/api/settings', authMiddleware, async (req, res) => {
     if (!settings || Array.isArray(settings)) { settings = {}; }
     const { section, deepseek_key, facebook_client_id, facebook_client_secret,
       youtube_client_id, youtube_client_secret, reddit_client_id, reddit_client_secret,
-      oauth_base_url, pexels_api_key, pixabay_api_key, ark_api_key, seedance_model_id, image_gen_model_id } = req.body;
+      oauth_base_url, pexels_api_key, pixabay_api_key, ark_api_key, seedance_model_id, image_gen_model_id, libtv_token } = req.body;
 
     if (deepseek_key) settings.deepseek_key = deepseek_key;
     if (section === 'llm') settings.deepseek_key = deepseek_key;
@@ -914,9 +1023,8 @@ app.post('/api/settings', authMiddleware, async (req, res) => {
       settings.reddit_client_id = reddit_client_id;
       settings.reddit_client_secret = reddit_client_secret;
     }
-    if (section === 'seedance') {
-      settings.ark_api_key = ark_api_key;
-      settings.seedance_model_id = seedance_model_id;
+    if (section === 'libtv') {
+      settings.libtv_token = libtv_token;
     }
     if (section === 'imagegen') {
       settings.image_gen_model_id = image_gen_model_id;
@@ -938,8 +1046,7 @@ app.post('/api/settings', authMiddleware, async (req, res) => {
       'OAUTH_BASE_URL=' + (settings.oauth_base_url || 'http://43.156.78.59:5288'),
       'PEXELS_API_KEY=' + (settings.pexels_api_key || ''),
       'PIXABAY_API_KEY=' + (settings.pixabay_api_key || ''),
-      'ARK_API_KEY=' + (settings.ark_api_key || ''),
-      'SEEDANCE_MODEL_ID=' + (settings.seedance_model_id || ''),
+      'LIBTV_TOKEN=' + (settings.libtv_token || process.env.LIBTV_TOKEN || ''),
       'IMAGE_GEN_MODEL_ID=' + (settings.image_gen_model_id || ''),
     ];
     // Merge with existing .env
@@ -982,27 +1089,16 @@ app.post('/api/settings/test-deepseek', authMiddleware, async (req, res) => {
   } catch (e) { res.json({ status: 'error', message: e.message }); }
 });
 
-// POST /api/settings/test-seedance - Test Seedance API connection
-app.post('/api/settings/test-seedance', authMiddleware, async (req, res) => {
+// POST /api/settings/test-libtv - Test LibTV connection
+app.post('/api/settings/test-libtv', authMiddleware, async (req, res) => {
   try {
-    const { ark_api_key, model_id } = req.body;
-    if (!ark_api_key) return res.status(400).json({ status: 'error', message: '缺少 API Key' });
-    if (!model_id) return res.status(400).json({ status: 'error', message: '缺少模型 ID' });
-    // Test with a simple chat completion (ARK is OpenAI-compatible)
-    const resp = await fetch("https://ark.cn-beijing.volces.com/api/v3/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + ark_api_key },
-      body: JSON.stringify({
-        model: model_id,
-        messages: [{ role: "user", content: "Hello" }],
-        max_tokens: 5
-      }),
-    });
-    if (resp.ok) {
-      res.json({ status: 'ok', message: '连接成功！' });
+    refreshLibtvToken();
+    if (!LIBTV_ENV.LIBTV_TOKEN) return res.json({ status: 'error', message: '请先在设置中配置 LibTV Token' });
+    const result = await libtvExec(['account', 'info']);
+    if (result && result.user) {
+      res.json({ status: 'ok', message: '连接成功！用户: ' + (result.user.nickname || result.user.uuid) });
     } else {
-      const err = await resp.json();
-      res.json({ status: 'error', message: err.error?.message || '连接失败 (HTTP ' + resp.status + ')' });
+      res.json({ status: 'error', message: 'LibTV 未登录或无响应' });
     }
   } catch (e) { res.json({ status: 'error', message: e.message }); }
 });
@@ -1101,6 +1197,52 @@ app.get('/api/team-tasks/today', authMiddleware, (req, res) => {
   res.json(task);
 });
 
+// POST /api/team-tasks/today/video - Standalone video generation (VideoPage)
+app.post('/api/team-tasks/today/video', authMiddleware, async (req, res) => {
+  try {
+    var today = new Date().toISOString().slice(0, 10);
+    var list = loadTeamTasks();
+    var task = list.find(function(t) { return t.date === today && t.userId === req.user.id; });
+    if (!task) {
+      task = {
+        _id: 'task_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        date: today, userId: req.user.id, subject: req.body.subject || '',
+        config: { articles: 0, videos: 0, publishTargets: {}, publishAccounts: {}, schedule: { publishAt: '', intervalMinutes: 5 } },
+        articles: [], videos: [], publishLog: [],
+        progress: { copywriter: 'idle', imagegen: 'idle', videomaker: 'idle', reviewer: 'idle', publisher: 'idle' },
+        status: 'idle', createdAt: new Date().toISOString(),
+      };
+      list.push(task);
+      saveTeamTasks(list);
+    }
+    // Create a video entry
+    var vid = { id: 'vid_' + Date.now().toString(36), subject: req.body.subject || task.subject, script: req.body.script || '', videoUrl: '', platformVariants: {}, review: { status: 'pending', reason: '' }, publishedTo: [], createdAt: new Date().toISOString() };
+    task.videos.push(vid);
+    saveTeamTasks(list);
+
+    // Generate video in background
+    (async function() {
+      try {
+        refreshLibtvToken();
+        if (LIBTV_ENV.LIBTV_TOKEN) {
+          var settings2 = loadDB('settings');
+          if (Array.isArray(settings2)) settings2 = {};
+          var libtvVideoModel2 = (settings2 && settings2.libtv_video_model) || 'Happy Horse 1.0';
+          var url = await libtvGenVideo(vid.script || '主题：' + vid.subject, libtvVideoModel2);
+          var l = loadTeamTasks();
+          var ti = l.findIndex(function(t) { return t._id === task._id; });
+          if (ti >= 0) {
+            var vi = l[ti].videos.findIndex(function(v) { return v.id === vid.id; });
+            if (vi >= 0) { l[ti].videos[vi].videoUrl = url; saveTeamTasks(l); }
+          }
+        }
+      } catch(e) {}
+    })();
+
+    res.json(vid);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/team-tasks/:id/config - Save daily config
 app.post('/api/team-tasks/:id/config', authMiddleware, (req, res) => {
   const list = loadTeamTasks();
@@ -1134,9 +1276,8 @@ app.post('/api/team-tasks/:id/run', authMiddleware, async (req, res) => {
   const settings = loadDB('settings');
   if (!settings || Array.isArray(settings)) { settings = {}; }
   const deepseekKey = settings?.deepseek_key || process.env.DEEPSEEK_KEY;
-  const arkKey = settings?.ark_api_key || process.env.ARK_API_KEY;
-  const imageGenModelId = settings?.image_gen_model_id || process.env.IMAGE_GEN_MODEL_ID;
-  const seedanceModelId = settings?.seedance_model_id || process.env.SEEDANCE_MODEL_ID;
+  const libtvImageModel = settings?.libtv_image_model || 'Seedream 4.5';
+  const libtvVideoModel = settings?.libtv_video_model || 'Happy Horse 1.0';
 
   // Helper: update progress
   function setProgress(employee, statusStr) {
@@ -1216,33 +1357,14 @@ platformsText +
     if (i2 >= 0) { l2[i2].articles = articles; l2[i2].progress.copywriter = 'done'; saveTeamTasks(l2); }
     setProgress('copywriter', 'done');
 
-    // ====== 2. Imagegen: Generate Images ======
+    // ====== 2. Imagegen: Generate Images via LibTV ======
     setProgress('imagegen', 'running');
-    if (arkKey && imageGenModelId) {
+    if (process.env.LIBTV_TOKEN || settings?.libtv_token) {
       for (let i = 0; i < articles.length; i++) {
         try {
-          const imgResp = await fetch('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + arkKey },
-            body: JSON.stringify({
-              model: imageGenModelId,
-              prompt: articles[i].imagePrompt,
-              size: '2048x2048',
-              response_format: 'url',
-              watermark: false,
-            }),
-          });
-          const imgJson = await imgResp.json();
-          if (imgJson.data?.[0]?.url) {
-            const imgResp2 = await fetch(imgJson.data[0].url);
-            const imgBuf = await imgResp2.arrayBuffer();
-            const imgName = 'art_' + Date.now().toString(36) + '_' + i + '.jpg';
-            fs.writeFileSync(path.join(DATA_DIR, imgName), Buffer.from(imgBuf));
-            articles[i].imageUrl = '/api/file/' + imgName;
-          }
-        } catch(e) { /* skip image gen failure */ }
-
-        // Update incremental progress
+          const imgPrompt = articles[i].imagePrompt || task.subject + ' 精美配图';
+          articles[i].imageUrl = await libtvGenImage(imgPrompt, libtvImageModel);
+        } catch(e) { /* skip */ }
         l2 = loadTeamTasks(); i2 = l2.findIndex(function(t) { return t._id === task._id; });
         if (i2 >= 0) { l2[i2].articles = articles; saveTeamTasks(l2); }
       }
@@ -1283,9 +1405,12 @@ platformsText +
           } catch(e) {}
         }
 
-        if (arkKey && seedanceModelId) {
-          video.videoUrl = 'pending: 待 Seedance 驱动';
-          video.review.status = 'pass';
+        if (process.env.LIBTV_TOKEN || settings?.libtv_token) {
+          try {
+            var vidPrompt = video.script || '主题：' + video.subject;
+            video.videoUrl = await libtvGenVideo(vidPrompt, libtvVideoModel);
+            video.review.status = video.videoUrl ? 'pass' : 'pending';
+          } catch(e) { video.review.status = 'pending'; }
         } else {
           video.review.status = 'pending';
         }
