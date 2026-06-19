@@ -14,9 +14,9 @@ interface Config {
   oauth_base_url: string;
   pexels_api_key: string;
   pixabay_api_key: string;
-  ark_api_key: string;
-  seedance_model_id: string;
-  image_gen_model_id: string;
+  libtv_token: string;
+  libtv_image_model: string;
+  libtv_video_model: string;
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -30,9 +30,9 @@ const DEFAULT_CONFIG: Config = {
   oauth_base_url: 'http://43.156.78.59:5288',
   pexels_api_key: '',
   pixabay_api_key: '',
-  ark_api_key: '',
-  seedance_model_id: '',
-  image_gen_model_id: '',
+  libtv_token: '',
+  libtv_image_model: 'Seedream 4.5',
+  libtv_video_model: 'Happy Horse 1.0',
 };
 
 const OAUTH_HELP = {
@@ -84,14 +84,13 @@ export default function SettingsPage() {
     finally { setSaving(null); }
   };
 
-  const testSeedance = async () => {
-    if (!config.ark_api_key) return toast.error('请先填写火山引擎 API Key');
-    if (!config.seedance_model_id) return toast.error('请先填写 Seedance 模型 ID');
+  const testLibtv = async () => {
+    if (!config.libtv_token) return toast.error('请先填写 LibTV Token');
     setTestResult({ status: 'testing', message: '测试中...' });
     try {
-      const resp = await api(token).post('/settings/test-seedance', { ark_api_key: config.ark_api_key, model_id: config.seedance_model_id });
+      const resp = await api(token).post('/settings/test-libtv', {});
       setTestResult(resp);
-      if (resp.status === 'ok') toast.success('Seedance API 连接成功！');
+      if (resp.status === 'ok') toast.success('LibTV 连接成功！');
       else toast.error(resp.message || '连接失败');
     } catch (e: any) { setTestResult({ status: 'error', message: e.message }); toast.error(e.message); }
   };
@@ -113,12 +112,11 @@ export default function SettingsPage() {
 
   const btnLabels: Record<string, string> = {
     llm: '保存 LLM 配置',
-    seedance: '保存 Seedance 配置',
+    libtv: '保存 LibTV 配置',
     facebook: '保存 Facebook 配置',
     youtube: '保存 YouTube 配置',
     reddit: '保存 Reddit 配置',
     oauth: '保存回调地址',
-    imagegen: '保存图片生成配置',
     medias: '保存素材 API',
   };
 
@@ -154,46 +152,58 @@ export default function SettingsPage() {
           </ConfigRow>
         </ConfigCard>
 
-        {/* Seedance AI Video Gen */}
-        <ConfigCard title="🎬 AI 视频生成 (Seedance)" desc="火山引擎 Seedance 2.0 AI 视频生成。替换 MPTurbo，无需下载素材">
-          <ConfigRow label="火山引擎 API Key (ARK_API_KEY)">
+        {/* LibTV AI Media Generation */}
+        <ConfigCard title="🎨 LibTV AI 媒体生成" desc="替代火山引擎。支持图片、视频、音频。14+ 生图模型 / 30+ 生视频模型 / 5+ 音频合成模型">
+          <ConfigRow label="LibTV Token">
             <div className="flex gap-2">
-              <input type="password" value={config.ark_api_key} onChange={set('ark_api_key')}
-                placeholder="填火山引擎方舟 API Key" className="flex-1 px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm" />
-              <button onClick={() => saveSection('seedance', { ark_api_key: config.ark_api_key, seedance_model_id: config.seedance_model_id })} disabled={saving === 'seedance'}
+              <input type="password" value={config.libtv_token} onChange={set('libtv_token')}
+                placeholder="从浏览器 Cookie 获取 usertoken" className="flex-1 px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm" />
+              <button onClick={() => saveSection('libtv', { libtv_token: config.libtv_token })} disabled={saving === 'libtv'}
                 className="px-4 py-2 bg-accent-primary/50 rounded-lg text-sm hover:bg-accent-primary/70 disabled:opacity-50">
-                {saving === 'seedance' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                {saving === 'libtv' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               </button>
             </div>
           </ConfigRow>
-          <ConfigRow label="Seedance 模型接入点 ID">
-            <input type="text" value={config.seedance_model_id} onChange={set('seedance_model_id')}
-              placeholder="ep-xxx（方舟控制台 → 模型接入 → 创建接入点）" className="w-full px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm" />
+          <ConfigRow label="图片生成模型">
+            <select value={config.libtv_image_model} onChange={e => setConfig(p => ({ ...p, libtv_image_model: e.target.value }))}
+              className="w-full px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm">
+              <option value="Seedream 4.5">Seedream 4.5 — 速度快，多角色一致性好</option>
+              <option value="Seedream 5.0 Lite">Seedream 5.0 Lite — 中式风格最佳</option>
+              <option value="Seedream 4.0">Seedream 4.0 — 极速高质出图</option>
+              <option value="Lib Image">Lib Image — 长文本能力突出</option>
+              <option value="Lib Navo 2">Lib Navo 2 — 支持联网搜索</option>
+              <option value="Z-image Turbo">Z-image Turbo — 极速（10秒）</option>
+              <option value="Midjourney V7">Midjourney V7 — 最佳美学</option>
+            </select>
           </ConfigRow>
-          <div className="flex gap-2 mt-3">
-            <button onClick={testSeedance} className="text-xs px-3 py-1.5 bg-dark-border rounded-lg hover:bg-gray-600 flex items-center gap-1">
+          <ConfigRow label="视频生成模型">
+            <select value={config.libtv_video_model} onChange={e => setConfig(p => ({ ...p, libtv_video_model: e.target.value }))}
+              className="w-full px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm">
+              <option value="Happy Horse 1.0">Happy Horse 1.0 — 阿里通义万相</option>
+              <option value="Hailuo 2.3 Fast">Hailuo 2.3 Fast — 快速生视频</option>
+              <option value="Hailuo 2.3">Hailuo 2.3 — 高质量版</option>
+              <option value="Wan 2.7">Wan 2.7 — 全能参考，支持编辑</option>
+              <option value="Pixverse V5.5">Pixverse V5.5 — 特效丰富</option>
+              <option value="Seedance 2.0 VIP">Seedance 2.0 VIP — 最强视频（需会员）</option>
+              <option value="Kling O3">Kling O3 — 可灵旗舰（需会员）</option>
+            </select>
+          </ConfigRow>
+          <div className="flex items-center gap-3 mt-3">
+            <button onClick={testLibtv} className="text-xs px-3 py-1.5 bg-dark-border rounded-lg hover:bg-gray-600 flex items-center gap-1">
               <ExternalLink size={12} /> 测试连接
             </button>
-            <a href="https://console.volcengine.com/ark" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline flex items-center gap-1">
-              <ExternalLink size={12} /> 打开火山引擎方舟
+            <a href="https://www.liblib.tv/cli" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline flex items-center gap-1">
+              <ExternalLink size={12} /> LibTV 官网
             </a>
+            {testResult && (
+              <span className={`text-xs px-2 py-1.5 rounded-lg flex items-center gap-1 ${testResult.status === 'ok' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                {testResult.status === 'ok' ? <CheckCircle2 size={12} /> : testResult.status === 'testing' ? <Loader2 size={12} className="animate-spin" /> : <AlertCircle size={12} />}
+                {testResult.message}
+              </span>
+            )}
           </div>
-        </ConfigCard>
-
-        {/* Image Generation */}
-        <ConfigCard title="🖼️ AI 图片生成 (Doubao Seedream)" desc="豆包文生图模型，为文案自动生成配图。同用火山引擎方舟">
-          <ConfigRow label="图片生成模型接入点 ID">
-            <div className="flex gap-2">
-              <input type="text" value={config.image_gen_model_id} onChange={set('image_gen_model_id')}
-                placeholder="ep-xxx（用 doubao-seedream 创建的接入点）" className="flex-1 px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm" />
-              <button onClick={() => saveSection('imagegen', { image_gen_model_id: config.image_gen_model_id })} disabled={saving === 'imagegen'}
-                className="px-4 py-2 bg-accent-primary/50 rounded-lg text-sm hover:bg-accent-primary/70 disabled:opacity-50">
-                {saving === 'imagegen' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              </button>
-            </div>
-          </ConfigRow>
-          <p className="text-xs text-gray-500 mt-2">
-            💡 ARK_API_KEY 共用 Seedance 的同一个 Key。模型推荐：<code className="text-blue-400">doubao-seedream-5-0-260128</code>
+          <p className="text-xs text-gray-500 mt-3">
+            💡 获取 Token：在 liblib.tv 按 F12 → Console → 输入 <code className="text-blue-400">document.cookie</code> → 复制 <code className="text-blue-400">usertoken</code> 的值
           </p>
         </ConfigCard>
 

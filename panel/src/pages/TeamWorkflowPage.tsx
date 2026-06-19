@@ -502,9 +502,13 @@ export default function TeamWorkflowPage() {
               {task.videos.map(vid => (
                 <div key={vid.id} className="bg-dark-card rounded-xl p-4 border border-dark-border">
                   <div className="flex items-start gap-4">
-                    <div className="w-20 h-20 rounded-lg bg-dark-bg flex items-center justify-center shrink-0">
-                      <Video size={24} className="text-gray-600" />
-                    </div>
+                    {vid.videoUrl ? (
+                      <video src={vid.videoUrl} controls className="w-28 h-20 rounded-lg object-cover shrink-0 bg-dark-bg" />
+                    ) : (
+                      <div className="w-20 h-20 rounded-lg bg-dark-bg flex items-center justify-center shrink-0">
+                        <Video size={24} className="text-gray-600" />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-medium truncate">{vid.subject}</h4>
