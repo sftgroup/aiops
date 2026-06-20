@@ -120,7 +120,18 @@ export default function TeamWorkflowPage() {
     try {
       await api(token!).post(`/team-tasks/${task._id}/run`);
       toast.success('🏢 团队已开工！');
-      // Polling handled by useEffect
+      const t = await api(token!).get(`/team-tasks/${task._id}`);
+      setTask(t);
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const stopTask = async () => {
+    if (!task) return;
+    try {
+      await api(token!).post(`/team-tasks/${task._id}/stop`);
+      toast.success('⏹️ 已停止');
+      const t = await api(token!).get(`/team-tasks/${task._id}`);
+      setTask(t);
     } catch (e: any) { toast.error(e.message); }
   };
 
@@ -213,7 +224,7 @@ export default function TeamWorkflowPage() {
       </h2>
 
       {/* ========== Progress Bars Section ========== */}
-      {task?.subject && (
+      {task && (
         <div className="bg-dark-card rounded-xl p-4 border border-dark-border mb-6">
           <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
             <Layers size={14} /> 团队进度
@@ -376,17 +387,28 @@ export default function TeamWorkflowPage() {
       {/* ========== Action Buttons ========== */}
       {task?.subject && (
         <div className="flex gap-3 mb-6">
-          {!isRunning && task.articles.length === 0 && (
-            <button onClick={runTask} disabled={isRunning}
-              className="flex items-center gap-2 px-5 py-2.5 bg-accent-primary/50 hover:bg-accent-primary/70 rounded-lg text-sm transition-colors disabled:opacity-50">
-              {isRunning ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-              🏢 让团队开工！
+          {(task.status === 'idle' || task.status === 'done') && task.articles.length === 0 && (
+            <button onClick={runTask}
+              className="flex items-center gap-2 px-5 py-2.5 bg-accent-primary/50 hover:bg-accent-primary/70 rounded-lg text-sm transition-colors">
+              <Play size={16} /> 🏢 让团队开工！
             </button>
           )}
-          {isRunning && (
-            <span className="flex items-center gap-2 text-sm text-yellow-400">
-              <Loader2 size={16} className="animate-spin" /> 团队工作中...
-            </span>
+          {(task.status === 'idle' || task.status === 'done') && task.articles.length > 0 && (
+            <button onClick={runTask}
+              className="flex items-center gap-2 px-5 py-2.5 bg-yellow-500/30 hover:bg-yellow-500/50 rounded-lg text-sm transition-colors">
+              <Play size={16} /> 🔄 重新生成
+            </button>
+          )}
+          {task.status === 'running' && (
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-2 text-sm text-yellow-400">
+                <Loader2 size={16} className="animate-spin" /> 团队工作中...
+              </span>
+              <button onClick={stopTask}
+                className="flex items-center gap-1 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-lg text-xs transition-colors">
+                <PauseCircle size={14} /> 停止
+              </button>
+            </div>
           )}
           {task.status === 'done' && (
             <>

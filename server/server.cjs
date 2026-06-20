@@ -1717,6 +1717,18 @@ app.post('/api/team-tasks/:id/review', authMiddleware, (req, res) => {
   res.json({ message: '审核完成' });
 });
 
+// POST /api/team-tasks/:id/stop - Stop a running task
+app.post('/api/team-tasks/:id/stop', authMiddleware, (req, res) => {
+  const list = loadTeamTasks();
+  const idx = list.findIndex(t => t._id === req.params.id && t.userId === req.user.id);
+  if (idx < 0) return res.status(404).json({ error: '任务不存在' });
+  if (list[idx].status !== 'running') return res.status(400).json({ error: '任务未在运行' });
+  list[idx].status = 'idle';
+  list[idx].progress = { copywriter: 'idle', imagegen: 'idle', videomaker: 'idle', stitcher: 'idle', reviewer: 'idle', publisher: 'idle' };
+  saveTeamTasks(list);
+  res.json({ message: '已停止' });
+});
+
 // GET /api/team-tasks/:id - Get full task detail
 app.get('/api/team-tasks/:id', authMiddleware, (req, res) => {
   const list = loadTeamTasks();
