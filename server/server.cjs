@@ -30,29 +30,30 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(path.join(DATA_DIR, 'uploads')));
+// Serve only media files through /api/file, reject JSON/JS/etc
+app.use('/api/file', function(req, res, next) {
+  var ext = path.extname(req.path).toLowerCase();
+  var allowed = ['.jpg','.jpeg','.png','.gif','.webp','.mp4','.mov','.avi','.webm','.pdf','.svg','.ico'];
+  if (!allowed.includes(ext)) return res.status(403).json({ error: 'Forbidden' });
+  next();
+});
 app.use('/api/file', express.static(DATA_DIR));
 
 // ─── Config ───────────────────────────────────────────────
 const CONFIG = {
   mpturboApi: process.env.MPTURBO_API || 'http://localhost:8080/api/v1',
-  deepseekKey: process.env.DEEPSEEK_KEY || 'sk-7579cf86500a4d22b0c5e1d096e0481c',
+  deepseekKey: process.env.DEEPSEEK_KEY || '',
   deepseekUrl: 'https://api.deepseek.com',
   aitoearnMcp: process.env.AITO_EARN_MCP || 'http://localhost:8090/api',
   aitoearnKey: process.env.AITO_EARN_KEY || '',
-  aitoearnInternalToken: process.env.AITO_EARN_INTERNAL_TOKEN || 'change-this-secret-token',
-  jwtSecret: process.env.JWT_SECRET || 'aiops-jwt-secret-change-in-production',
-  twitterConsumerKey: process.env.TWITTER_CONSUMER_KEY || 'muQw5zLuku0Y6mcY8AGV2tAF5',
-  twitterConsumerSecret: process.env.TWITTER_CONSUMER_SECRET || 'QiuVrHzuu0CrIuOwoaq3gB4eqrn4XX9dHHQbanTevDt9LI4gFm',
+  aitoearnInternalToken: process.env.AITO_EARN_INTERNAL_TOKEN || '',
+  jwtSecret: process.env.JWT_SECRET || '',
+  twitterConsumerKey: process.env.TWITTER_CONSUMER_KEY || '',
+  twitterConsumerSecret: process.env.TWITTER_CONSUMER_SECRET || '',
 };
 
-// ─── DB (JSON file based, lightweight) ────────────────────
-function loadDB(name) {
-  const p = path.join(DATA_DIR, `${name}.json`);
-  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return []; }
-}
-function saveDB(name, data) {
-  fs.writeFileSync(path.join(DATA_DIR, `${name}.json`), JSON.stringify(data, null, 2));
-}
+// ─── DB (SQLite via better-sqlite3) ────────────────────
+const { loadDB, saveDB } = require('./db.cjs');
 
 // ─── Helpers ──────────────────────────────────────────────
 function uuid() { return 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, c => {const r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16);}); }
@@ -286,7 +287,8 @@ app.get('/api/aiops/platforms', authMiddleware, async (req, res) => {
 
 // GET /api/aiops/account-ui - AiToEarn account management URL
 app.get('/api/aiops/account-ui', authMiddleware, (req, res) => {
-  res.json({ url: 'http://43.156.78.59:8090' });
+  var baseUrl = (loadDB('settings').aitoearn_base_url || process.env.AITO_EARN_BASE_URL || 'http://localhost:8090');
+  res.json({ url: baseUrl });
 });
 
 // POST /api/aiops/publish - Publish content via AiToEarn MCP
@@ -797,7 +799,7 @@ app.get('/api/publishes/direct', authMiddleware, (req, res) => {
 // ─── OAuth 2.0 Provider Framework ────────────────────────────
 // Generic OAuth 2.0 Authorization Code flow for multiple platforms.
 // Callback URL: {OAUTH_BASE_URL}/api/oauth/{platform}/callback
-const OAUTH_BASE_URL = (loadDB('settings').oauth_base_url || process.env.OAUTH_BASE_URL || 'http://43.156.78.59:5288');
+const OAUTH_BASE_URL = (loadDB('settings').oauth_base_url || process.env.OAUTH_BASE_URL || 'http://localhost:5288');
 const pkceStore = {};
 
 const OAUTH_PROVIDERS = {
@@ -953,62 +955,6 @@ app.get('/api/oauth/:platform/callback', async (req, res) => {
 });
 
 
-// ─── Direct Publish to Bound Accounts ─────────────────────
-app.post('/api/publish/direct', authMiddleware, async (req, res) => {
-  try {
-    const { contentId, accountIds, text } = req.body;
-    if (!contentId && !text) return res.status(400).json({ error: '请选择内容或输入发布文案' });
-    const contents = loadDB('contents');
-    const content = contentId ? contents.find(c => c.id === contentId && c.userId === req.user.id) : null;
-    const publishText = text || (content ? (content.text || content.subject || '') : '');
-    const accounts = loadDB('accounts');
-    let targetAccounts = accounts.filter(a => a.userId === req.user.id);
-    if (accountIds?.length) targetAccounts = targetAccounts.filter(a => accountIds.includes(a.id));
-    if (!targetAccounts.length) return res.status(400).json({ error: '未选择有效账号' });
-    const results = [];
-    const publishes = loadDB('publishes');
-    for (const account of targetAccounts) {
-      let result;
-      let success = false;
-      if (account.platform === 'twitter') {
-        try {
-          const tweetBody = { text: publishText };
-          const requestData = { url: TWITTER_API + '/2/tweets', method: 'POST' };
-          const token = { key: account.oauth_token, secret: account.oauth_token_secret };
-          const headers = twitterOAuth.toHeader(twitterOAuth.authorize(requestData, token));
-          const resp = await fetch(requestData.url, {
-            method: 'POST',
-            headers: { ...headers, 'Content-Type': 'application/json' },
-            body: JSON.stringify(tweetBody),
-          });
-          result = await resp.json();
-          success = resp.ok && result?.data?.id;
-        } catch (e) { result = { error: e.message }; }
-      } else {
-        result = { error: '平台 ' + account.platform + ' 暂不支持' };
-      }
-      const pub = {
-        id: uuid(), userId: req.user.id, contentId: contentId || null,
-        accountId: account.id, platform: account.platform,
-        screenName: account.screenName || account.name,
-        text: publishText.slice(0, 100),
-        status: success ? 'published' : 'failed',
-        result, createdAt: Date.now(),
-      };
-      publishes.push(pub);
-      results.push(pub);
-    }
-    saveDB('publishes', publishes);
-    if (content) { content.status = 'published'; saveDB('contents', contents); }
-    res.json(results);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/publishes/direct', authMiddleware, (req, res) => {
-  const publishes = loadDB('publishes').filter(p => p.userId === req.user.id && p.accountId);
-  res.json(publishes.sort((a, b) => b.createdAt - a.createdAt));
-});
-
 // ─── OAuth 2.0 Provider Framework ────────────────────────────
 
 // ─── Settings API ────────────────────────────────────────────
@@ -1062,7 +1008,7 @@ app.post('/api/settings', authMiddleware, async (req, res) => {
       'YOUTUBE_CLIENT_SECRET=' + (settings.youtube_client_secret || ''),
       'REDDIT_CLIENT_ID=' + (settings.reddit_client_id || ''),
       'REDDIT_CLIENT_SECRET=' + (settings.reddit_client_secret || ''),
-      'OAUTH_BASE_URL=' + (settings.oauth_base_url || 'http://43.156.78.59:5288'),
+      'OAUTH_BASE_URL=' + (settings.oauth_base_url || process.env.OAUTH_BASE_URL || 'http://localhost:5288'),
       'PEXELS_API_KEY=' + (settings.pexels_api_key || ''),
       'PIXABAY_API_KEY=' + (settings.pixabay_api_key || ''),
       'LIBTV_TOKEN=' + (settings.libtv_token || process.env.LIBTV_TOKEN || ''),
@@ -1163,26 +1109,24 @@ app.use(express.static(PANEL_DIST));
 
 // ─── Team Tasks (Virtual Team Workflow) ──────────────
 function loadTeamTasks() {
-  try {
-    const d = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'team-tasks.json'), 'utf8'));
-    return Array.isArray(d) ? d : [];
-  } catch { return []; }
+  var d = loadDB('team-tasks');
+  return Array.isArray(d) ? d : [];
 }
 function saveTeamTasks(data) {
-  fs.writeFileSync(path.join(DATA_DIR, 'team-tasks.json'), JSON.stringify(data, null, 2));
+  saveDB('team-tasks', data);
 }
 
 function updateTeamProgress(taskId, employee, statusStr) {
   try {
-    const l = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'team-tasks.json'), 'utf8'));
+    const l = loadTeamTasks();
     if (!Array.isArray(l)) return;
     const idx = l.findIndex(t => t._id === taskId);
     if (idx >= 0) {
       if (!l[idx].progress) l[idx].progress = { copywriter: 'idle', imagegen: 'idle', videomaker: 'idle', reviewer: 'idle', publisher: 'idle' };
       l[idx].progress[employee] = statusStr;
-      fs.writeFileSync(path.join(DATA_DIR, 'team-tasks.json'), JSON.stringify(l, null, 2));
+      saveTeamTasks(l);
     }
-  } catch(e) {}
+  } catch(e) { console.error('[team] updateTeamProgress error:', e.message); }
 }
 
 // GET /api/team-tasks - List all team tasks
@@ -1256,7 +1200,7 @@ app.post('/api/team-tasks/today/video', authMiddleware, async (req, res) => {
             if (vi >= 0) { l[ti].videos[vi].videoUrl = url; saveTeamTasks(l); }
           }
         }
-      } catch(e) {}
+      } catch(e) { console.error('[video] background gen error:', e.message); }
     })();
 
     res.json(vid);
@@ -1384,7 +1328,7 @@ platformsText +
         try {
           const imgPrompt = articles[i].imagePrompt || task.subject + ' 精美配图';
           articles[i].imageUrl = await libtvGenImage(imgPrompt, libtvImageModel);
-        } catch(e) { /* skip */ }
+        } catch(e) { console.error('[team] imagegen error:', e.message); }
         l2 = loadTeamTasks(); i2 = l2.findIndex(function(t) { return t._id === task._id; });
         if (i2 >= 0) { l2[i2].articles = articles; saveTeamTasks(l2); }
       }
@@ -1422,7 +1366,7 @@ platformsText +
             });
             const sData = await sResp.json();
             video.script = sData.choices?.[0]?.message?.content || '';
-          } catch(e) {}
+          } catch(e) { console.error('[team] script gen error:', e.message); }
         }
 
         if (process.env.LIBTV_TOKEN || settings?.libtv_token) {
@@ -1489,7 +1433,7 @@ platformsText +
                 try {
                   var n = JSON.parse(lines[li]);
                   if (n.data && n.data.url && n.data.url.length) { clipUrl = n.data.url[0]; break; }
-                } catch(e) {}
+                } catch(e) { console.error('[team] stitcher parse error:', e.message); }
               }
             }
           }
@@ -1502,7 +1446,7 @@ platformsText +
             if (i2 >= 0) { l2[i2].stitchedVideoUrl = '/api/file/' + clipName; saveTeamTasks(l2); }
           }
         }
-      } catch(e) { /* stitcher failure not fatal */ }
+      } catch(e) { console.error('[team] stitcher error:', e.message); }
     })();
     setProgress('stitcher', 'done');
 
@@ -1551,6 +1495,7 @@ platformsText +
       saveTeamTasks(l2);
     }
   } catch(e) {
+    console.error('[team] workflow run error:', e.message);
     l2 = loadTeamTasks(); i2 = l2.findIndex(function(t) { return t._id === task._id; });
     if (i2 >= 0) { l2[i2].status = 'done'; saveTeamTasks(l2); }
   }
@@ -1784,6 +1729,18 @@ app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'API not found' });
   res.sendFile(path.join(PANEL_DIST, 'index.html'));
 });
+
+// ─── Startup Checks ─────────────────────────────────────
+if (!CONFIG.jwtSecret) {
+  console.error('FATAL: JWT_SECRET is not set. Set it in .env or environment variables.');
+  process.exit(1);
+}
+if (!CONFIG.deepseekKey) {
+  console.warn('WARN: DEEPSEEK_KEY is not set. AI text generation will fail.');
+}
+if (!CONFIG.twitterConsumerKey || !CONFIG.twitterConsumerSecret) {
+  console.warn('WARN: TWITTER_CONSUMER_KEY/SECRET not set. Twitter OAuth will fail.');
+}
 
 // ─── Startup ──────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
