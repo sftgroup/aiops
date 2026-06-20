@@ -1320,6 +1320,7 @@ platformsText +
     let i2 = l2.findIndex(function(t) { return t._id === task._id; });
     if (i2 >= 0) { l2[i2].articles = articles; l2[i2].progress.copywriter = 'done'; saveTeamTasks(l2); }
     setProgress('copywriter', 'done');
+    if (shouldStop()) { setProgress('copywriter', 'idle'); return; }
 
     // ====== 2. Imagegen: Generate Images via LibTV ======
     setProgress('imagegen', 'running');
@@ -1334,6 +1335,7 @@ platformsText +
       }
     }
     setProgress('imagegen', 'done');
+    if (shouldStop()) { setProgress('imagegen', 'idle'); return; }
 
     // ====== 3. Videomaker: Generate Videos ======
     setProgress('videomaker', 'running');
@@ -1395,6 +1397,7 @@ platformsText +
     }
     const videos = await Promise.all(videoPromises);
     setProgress('videomaker', 'done');
+    if (shouldStop()) { setProgress('videomaker', 'idle'); return; }
 
     // ====== 4. Stitcher: Stitch video segments via LibTV video-clip ======
     setProgress('stitcher', 'running');
@@ -1449,6 +1452,7 @@ platformsText +
       } catch(e) { console.error('[team] stitcher error:', e.message); }
     })();
     setProgress('stitcher', 'done');
+    if (shouldStop()) { setProgress('stitcher', 'idle'); return; }
 
     // ====== 5. Reviewer: Auto-review all content ======
     setProgress('reviewer', 'running');
@@ -1479,6 +1483,7 @@ platformsText +
       if (videos[i].script) videos[i].review.status = 'pass';
     }
     setProgress('reviewer', 'done');
+    if (shouldStop()) { setProgress('reviewer', 'idle'); return; }
 
     // ====== Final save ======
     l2 = loadTeamTasks(); i2 = l2.findIndex(function(t) { return t._id === task._id; });
@@ -1497,7 +1502,7 @@ platformsText +
   } catch(e) {
     console.error('[team] workflow run error:', e.message);
     l2 = loadTeamTasks(); i2 = l2.findIndex(function(t) { return t._id === task._id; });
-    if (i2 >= 0) { l2[i2].status = 'done'; saveTeamTasks(l2); }
+    if (i2 >= 0 && l2[i2].status === 'running') { l2[i2].status = 'done'; saveTeamTasks(l2); }
   }
 });
 // POST /api/team-tasks/:id/review - Batch review: approve/reject items
