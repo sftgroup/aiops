@@ -178,6 +178,7 @@ export default function ContentPage() {
   // 切换页面/刷新时从 localStorage 恢复草稿
   useEffect(() => {
     try {
+      // 如果已有草稿，说明生成已完成，清理可能遗留的任务标记
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const draft = JSON.parse(raw);
@@ -188,6 +189,8 @@ export default function ContentPage() {
         if (draft.prompt) setAiPrompt(draft.prompt);
         if (draft.text) setGeneratedText(draft.text);
         if (draft.imageUrl) setGeneratedImage(draft.imageUrl);
+        // 已有完成草稿 → 清理可能遗留的未完成任务标记，防止重复生成
+        localStorage.removeItem(LS_KEY);
       }
     } catch {}
   }, []);
