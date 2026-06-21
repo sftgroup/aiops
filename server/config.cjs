@@ -244,7 +244,7 @@ async function libtvGenVideo(prompt, modelName, duration) {
 }
 
 // ─── AiToEarn MCP ──────────────────────────────────────
-const AI_TOEARN_MCP = 'https://aitoearn.ai/api/unified/mcp';
+const AI_TOEARN_MCP = "https://aitoearn.ai/api/unified/mcp";
 
 const MCP_TOOLS = {
   listPlatforms: 'listChannelPlatforms',
@@ -255,7 +255,7 @@ const MCP_TOOLS = {
 };
 
 async function mcpCall(toolName, args) {
-  // Use curl to avoid Node.js fetch ByteString encoding issue with Unicode
+  // Use execSync curl to completely bypass Node.js ByteString encoding issue
   const { execSync } = require('child_process');
   const reqBody = JSON.stringify({
     jsonrpc: '2.0',
@@ -263,11 +263,13 @@ async function mcpCall(toolName, args) {
     params: { name: toolName, arguments: args || {} },
     id: 1,
   });
+  // Quote values properly for bash shell
+  const apiKey = CONFIG.aitoearnKey || '';
   const cmd = 'curl -s -X POST ' + JSON.stringify(AI_TOEARN_MCP) +
-    ' -H ' + JSON.stringify('Content-Type: application/json') +
-    ' -H ' + JSON.stringify('x-api-key: ' + CONFIG.aitoearnKey) +
-    ' -d ' + JSON.stringify(reqBody);
-  const result = execSync(cmd, { encoding: 'utf-8', timeout: 30000 });
+    " -H 'Content-Type: application/json'" +
+    " -H 'x-api-key: " + apiKey.replace(/'/g, "'\\''") + "'" +
+    " -d '" + reqBody.replace(/'/g, "'\\''") + "'";
+  const result = execSync(cmd, { encoding: 'utf-8', timeout: 30000, shell: '/bin/bash' });
   return JSON.parse(result);
 }
 
