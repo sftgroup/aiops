@@ -255,21 +255,20 @@ const MCP_TOOLS = {
 };
 
 async function mcpCall(toolName, args) {
-  const resp = await fetch(AI_TOEARN_MCP, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json, text/event-stream',
-      'x-api-key': CONFIG.aitoearnKey,
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'tools/call',
-      params: { name: toolName, arguments: args || {} },
-      id: 1,
-    }),
+  // Use curl to avoid Node.js fetch ByteString encoding issue with Unicode
+  const { execSync } = require('child_process');
+  const reqBody = JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'tools/call',
+    params: { name: toolName, arguments: args || {} },
+    id: 1,
   });
-  return await resp.json();
+  const cmd = 'curl -s -X POST ' + JSON.stringify(AI_TOEARN_MCP) +
+    ' -H ' + JSON.stringify('Content-Type: application/json') +
+    ' -H ' + JSON.stringify('x-api-key: ' + CONFIG.aitoearnKey) +
+    ' -d ' + JSON.stringify(reqBody);
+  const result = execSync(cmd, { encoding: 'utf-8', timeout: 30000 });
+  return JSON.parse(result);
 }
 
 module.exports = {
