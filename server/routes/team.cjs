@@ -157,34 +157,46 @@ module.exports = function (app) {
         task.videos.push(vid);
         saveTeamTasks(list);
 
-        // Generate video in background
+        // Generate video in background with progress tracking
         (async () => {
           try {
-            // libtv-cli.cjs handles auth internally
-            {
-              let settings2 = loadDB('settings');
-              if (Array.isArray(settings2)) settings2 = {};
-              const libtvVideoModel2 =
-                (settings2 && settings2.libtv_video_model) ||
-                'Happy Horse 1.0';
-              const result = await libtvGenVideo(
-                vid.script || vid.subject || task.subject,
-                task.subject || 'AI',
-                { model: libtvVideoModel2, duration: vid.duration, cameraMovement: req.body.cameraMovement }
-              );
-              const url = result.url;
-              const l = loadTeamTasks();
-              const ti = l.findIndex((t) => t._id === task._id);
-              if (ti >= 0) {
-                const vi = l[ti].videos.findIndex((v) => v.id === vid.id);
-                if (vi >= 0) {
-                  l[ti].videos[vi].videoUrl = url;
-                  saveTeamTasks(l);
-                }
+            // Set progress to running
+            task.progress = task.progress || {};
+            task.progress.videomaker = 'running';
+            saveTeamTasks(list);
+
+            let settings2 = loadDB('settings');
+            if (Array.isArray(settings2)) settings2 = {};
+            const model = (settings2 && settings2.libtv_video_model) || 'Happy Horse 1.0';
+            const result = await libtvGenVideo(
+              vid.script || vid.subject || task.subject,
+              task.subject || 'AI',
+              { model, duration: vid.duration, cameraMovement: req.body.cameraMovement }
+            );
+            const url = result.url;
+            const l = loadTeamTasks();
+            const ti = l.findIndex((t) => t._id === task._id);
+            if (ti >= 0) {
+              const vi = l[ti].videos.findIndex((v) => v.id === vid.id);
+              if (vi >= 0) {
+                l[ti].videos[vi].videoUrl = url;
+                l[ti].progress = l[ti].progress || {};
+                l[ti].progress.videomaker = url ? 'done' : 'error';
+                saveTeamTasks(l);
+                console.log('[video] gen done:', url || 'no_url');
               }
             }
           } catch (e) {
             console.error('[video] background gen error:', e.message);
+            try {
+              const l2 = loadTeamTasks();
+              const ti2 = l2.findIndex((t) => t._id === task._id);
+              if (ti2 >= 0) {
+                l2[ti2].progress = l2[ti2].progress || {};
+                l2[ti2].progress.videomaker = 'error';
+                saveTeamTasks(l2);
+              }
+            } catch {}
           }
         })();
 

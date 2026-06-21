@@ -158,7 +158,7 @@ async function genVideo(subject, teamName, options = {}) {
   createArgs.push('-r');
   await libtvExec(createArgs, 15).catch(() => null);
   let lastProgress = '';
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 60; i++) {
     await new Promise(r => setTimeout(r, 5000));
     try {
       const getArgs = ['node', nodeName];
