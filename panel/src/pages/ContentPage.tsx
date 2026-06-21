@@ -41,7 +41,9 @@ export default function ContentPage() {
           setProgressBar({ step: 'completed', progress: 100, message: '配图完成' });
           setProgressStep('');
           localStorage.removeItem(LS_KEY);
+          // 配图完成了，更新保存的记录（带上图片）
           await autoSave(text, status.url || '', prompt);
+          load();
           toast.success('已自动保存');
           setGenerating(false);
           return;
@@ -50,18 +52,27 @@ export default function ContentPage() {
           clearInterval(pollRef.current!);
           pollRef.current = null;
           setProgressBar({ step: 'failed', progress: 0, message: status.error || '配图生成失败' });
-          toast.error('配图生成失败，文案已显示');
+          toast('配图生成失败，文案已保存', { icon: '⚠️' });
           localStorage.removeItem(LS_KEY);
-          await autoSave(text, '', prompt);
-          toast.success('文案已保存');
           setGenerating(false);
+          load();
           return;
         }
         setProgressBar({ step: status.step, progress: status.progress || 0, message: status.message || '' });
         setProgressStep(status.step === 'polling'
           ? `配图生成中 (${status.iteration || '?'}/${status.total || 30})...`
           : status.message || '生成中...');
-      } catch {}
+      } catch (e: any) {
+        const errText = String(e.message || e);
+        if (errText.includes('404') || errText.includes('不存在') || errText.includes('过期')) {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          localStorage.removeItem(LS_KEY);
+          setProgressBar({ step: 'completed', progress: 100, message: '配图任务已结束' });
+          setProgressStep('');
+          setGenerating(false);
+        }
+      }
     }, 2000);
   };
 
@@ -155,9 +166,13 @@ export default function ContentPage() {
       setGeneratedText(textResult.text);
       setProgressBar({ step: 'text', progress: 50, message: '文案生成完成' });
 
-      // 更新 localStorage（文案已就绪）
+      // 文案一拿到就自动保存，不等配图
+      await autoSave(textResult.text, '', prompt);
+      toast.success('文案已保存');
+
+      // 更新 localStorage（文案已保存）
       entry.text = textResult.text;
-      entry.step = 'text-done';
+      entry.step = 'text-saved';
       localStorage.setItem(LS_KEY, JSON.stringify(entry));
 
       // Step 2: Submit image generation task
