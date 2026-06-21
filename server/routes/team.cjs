@@ -193,6 +193,40 @@ module.exports = function (app) {
     }
   );
 
+  // DELETE /api/team-tasks/today/video/:videoId — Delete one video
+  app.delete(
+    '/api/team-tasks/today/video/:videoId',
+    authMiddleware,
+    (req, res) => {
+      try {
+        const list = loadTeamTasks();
+        const today = new Date().toISOString().slice(0, 10);
+        const task = list.find(
+          (t) => t.date === today && t.userId === req.user.id
+        );
+        if (!task) return res.status(404).json({ error: '今日任务不存在' });
+        const idx = task.videos.findIndex(
+          (v) => v.id === req.params.videoId
+        );
+        if (idx === -1)
+          return res.status(404).json({ error: '视频未找到' });
+        // 删除文件
+        const vUrl = task.videos[idx].videoUrl;
+        if (vUrl && vUrl.startsWith('/api/file/')) {
+          const fp = path.join(DATA_DIR, vUrl.replace('/api/file/', ''));
+          try {
+            if (fs.existsSync(fp)) fs.unlinkSync(fp);
+          } catch {}
+        }
+        task.videos.splice(idx, 1);
+        saveTeamTasks(list);
+        res.json({ ok: true });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    }
+  );
+
   // POST /api/team-tasks/:id/config — Save daily config
   app.post('/api/team-tasks/:id/config', authMiddleware, (req, res) => {
     const list = loadTeamTasks();

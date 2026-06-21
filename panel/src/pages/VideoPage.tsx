@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth, api } from '../AuthContext';
 import toast from 'react-hot-toast';
-import { Loader2, Sparkles, Video, Play, Clock } from 'lucide-react';
+import {
+  Loader2, Sparkles, Video, Play, Clock,
+  FileText, Trash2, Download, CheckCircle2
+} from 'lucide-react';
 import PublishSection from '../components/PublishSection';
 
 interface VideoItem {
@@ -12,29 +15,51 @@ interface VideoItem {
   createdAt: string;
 }
 
+interface TeamTask {
+  videos: VideoItem[];
+  progress?: {
+    videomaker?: string;
+  };
+}
+
 export default function VideoPage() {
   const { token } = useAuth();
   const [subject, setSubject] = useState('');
   const [script, setScript] = useState('');
   const [generatingScript, setGeneratingScript] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [progressMsg, setProgressMsg] = useState('');
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loadingVideos, setLoadingVideos] = useState(true);
+  const pollRef = useRef<number | null>(null);
+  const videoDoneRef = useRef<string | null>(null); // track which video id just completed
 
   useEffect(() => {
     loadVideos();
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [token]);
 
   const loadVideos = async () => {
     try {
-      const t = await api(token!).get('/team-tasks/today');
-      if (t?.videos) setVideos(t.videos);
+      const t = await api(token!).get('/team-tasks/today') as TeamTask;
+      if (t?.videos) {
+        // 检测是否有新完成的视频
+        setVideos(prev => {
+          for (const v of t.videos) {
+            if (v.videoUrl && !prev.find(p => p.id === v.id)?.videoUrl) {
+              videoDoneRef.current = v.id;
+              setTimeout(() => { videoDoneRef.current = null; }, 2000);
+            }
+          }
+          return t.videos;
+        });
+      }
     } catch { /* ignore */ }
     setLoadingVideos(false);
   };
 
   const handleGenerateScript = async () => {
-    if (!subject) return toast.error('请输入视频主题');
+    if (!subject.trim()) return toast.error('请输入视频主题');
     setGeneratingScript(true);
     try {
       const d = await api(token!).post('/videos/scripts', { subject });
@@ -45,127 +70,297 @@ export default function VideoPage() {
   };
 
   const handleGenerateVideo = async () => {
-    if (!subject) return toast.error('请输入视频主题');
+    if (!subject.trim()) return toast.error('请输入视频主题');
     setGenerating(true);
+    setProgressMsg('连接 LibTV...');
+    setVideos(prev => prev.filter(v => v.videoUrl)); // keep only completed ones in gallery
     try {
       const d = await api(token!).post('/team-tasks/today/video', {
         subject, script,
       });
-      toast.success('LibTV 视频生成中...');
+      toast.success('📽️ 视频已提交，实时追踪中...');
+      setProgressMsg('已提交，等待队列...');
 
-      const poll = setInterval(async () => {
+      // 实时轮询 progress
+      let stepTimer = 0;
+      const steps = ['准备素材...', '生成视频片段...', '合成最终视频...', '即将完成...'];
+
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = window.setInterval(async () => {
         try {
-          const t = await api(token!).get('/team-tasks/today');
+          const t = await api(token!).get('/team-tasks/today') as TeamTask;
+          
+          // 更新进度
+          const prog = t.progress?.videomaker;
+          if (prog === 'running') {
+            stepTimer = Math.min(stepTimer + 1, steps.length - 1);
+            setProgressMsg(steps[stepTimer]);
+          } else if (prog === 'done') {
+            setProgressMsg('合成完成');
+          }
+
+          // 检测视频完成
           const vid = t?.videos?.find((v: any) => v.id === d.id);
           if (vid?.videoUrl) {
-            clearInterval(poll);
-            setVideos(t.videos);
-            toast.success('🎬 视频生成完成！');
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            loadVideos(); // 刷新全列表
+            setProgressMsg('');
             setGenerating(false);
+            toast.success('🎬 视频生成完成！');
+            return;
           }
-          if (vid?.videoUrl === '' || vid?.videoUrl === null) {
-            // still generating
-          }
-        } catch { clearInterval(poll); setGenerating(false); }
-      }, 5000);
+        } catch {}
+      }, 4000);
 
-      setTimeout(() => { clearInterval(poll); setGenerating(false); loadVideos(); }, 600000);
+      // 超时保护（10分钟）
+      setTimeout(() => {
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setGenerating(false);
+          loadVideos();
+          toast.error('生成超时，请重试');
+        }
+      }, 600000);
 
     } catch (e: any) { toast.error(e.message); setGenerating(false); }
   };
 
+  const handleDeleteVideo = async (videoId: string) => {
+    try {
+      await api(token!).del('/api/team-tasks/today/video/' + videoId);
+      setVideos(prev => prev.filter(v => v.id !== videoId));
+      toast.success('已删除');
+    } catch (e: any) { toast.error(e.message || '删除失败'); }
+  };
+
   if (loadingVideos) {
-    return <div className="flex items-center justify-center h-64"><Loader2 size={32} className="animate-spin text-gray-400" /></div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 size={28} className="animate-spin text-gray-500" />
+          <span className="text-sm text-gray-500">加载中...</span>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">🎬 视频制作</h2>
+      {/* Header */}
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold">🎬 视频制作</h2>
+        <p className="text-sm text-gray-500 mt-1">输入主题，AI 自动生成脚本和视频，一键发布到社交媒体</p>
+      </div>
 
       <div className="space-y-4 mb-8">
-          {/* Video Subject */}
-          <div className="bg-dark-card rounded-xl p-5 border border-dark-border space-y-3">
+        {/* Subject Card */}
+        <div className="bg-dark-card rounded-xl border border-dark-border overflow-hidden">
+          <div className="px-5 py-4 border-b border-dark-border flex items-center gap-2">
+            <span className="w-7 h-7 rounded-lg bg-purple-500/20 flex items-center justify-center">
+              <span className="text-xs">🎯</span>
+            </span>
             <h3 className="font-semibold">视频主题</h3>
+          </div>
+          <div className="p-5">
             <input
-              className="w-full px-3 py-2.5 bg-dark-bg border border-dark-border rounded-lg text-white focus:outline-none"
+              className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-xl text-white focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
               value={subject}
               onChange={e => setSubject(e.target.value)}
-              placeholder="例如：AI 改变生活"
+              placeholder="例如：AI 改变生活、未来科技展望…"
+              disabled={generating}
             />
           </div>
+        </div>
 
-          {/* Script / Prompt */}
-          <div className="bg-dark-card rounded-xl p-5 border border-dark-border space-y-3">
-            <div className="flex items-center justify-between">
+        {/* Script Card */}
+        <div className="bg-dark-card rounded-xl border border-dark-border overflow-hidden">
+          <div className="px-5 py-4 border-b border-dark-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-7 h-7 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <FileText size={14} className="text-blue-400" />
+              </span>
               <h3 className="font-semibold">视频文案 / 提示词</h3>
-              <button
-                onClick={handleGenerateScript}
-                disabled={generatingScript || !subject}
-                className="text-xs text-accent-primary hover:underline disabled:opacity-50 flex items-center gap-1"
-              >
-                {generatingScript ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                {generatingScript ? '生成中...' : 'AI 生成文案'}
-              </button>
             </div>
+            <button
+              onClick={handleGenerateScript}
+              disabled={generatingScript || !subject.trim()}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-all disabled:opacity-40"
+            >
+              {generatingScript ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {generatingScript ? '生成中...' : 'AI 生成文案'}
+            </button>
+          </div>
+          <div className="p-5">
             <textarea
-              className="w-full px-3 py-2.5 bg-dark-bg border border-dark-border rounded-lg text-white focus:outline-none h-40 resize-none"
+              className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-xl text-white focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all h-36 resize-none text-sm leading-relaxed placeholder:text-gray-600"
               value={script}
               onChange={e => setScript(e.target.value)}
               placeholder="AI 自动生成或手动输入提示词。LibTV 会根据文案生成匹配视频..."
+              disabled={generating}
             />
-          </div>
-
-          {/* Generate Button */}
-          <button
-            onClick={handleGenerateVideo}
-            disabled={generating || !subject}
-            className="flex items-center justify-center gap-2 w-full py-3 bg-accent-primary hover:bg-accent-primary/80 rounded-lg font-medium transition-colors disabled:opacity-50"
-          >
-            {generating ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
-            {generating ? '生成中...' : '🎬 LibTV 生成视频'}
-          </button>
-
-          {generating && (
-            <div className="text-center text-sm text-yellow-400 py-4 bg-dark-card rounded-lg border border-dark-border">
-              <Loader2 size={20} className="animate-spin mx-auto mb-2" />
-              <p>视频生成中，请稍候...</p>
-              <p className="text-xs text-gray-500 mt-1">通常 30 秒~2 分钟完成</p>
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-xs text-gray-600">
+                {script.length > 0 ? `${script.length} 字` : ''}
+              </span>
+              {script && (
+                <button
+                  onClick={() => setScript('')}
+                  className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  清空
+                </button>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
-      {/* Video List / Gallery */}
-      <div className="mt-8">
-        <h3 className="font-semibold mb-4 flex items-center gap-2">
-          <Video size={18} /> 已生成的视频
-          <span className="text-xs text-gray-500 font-normal">({videos.length} 条)</span>
-        </h3>
+        {/* Generate Button & Progress */}
+        <button
+          onClick={handleGenerateVideo}
+          disabled={generating || !subject.trim()}
+          className="flex items-center justify-center gap-2 w-full py-3.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded-xl font-medium transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-purple-900/30"
+        >
+          {generating ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <Play size={18} />
+          )}
+          {generating ? '生成中...' : '🎬 LibTV 生成视频'}
+        </button>
+
+        {/* Real-time Progress */}
+        {generating && (
+          <div className="bg-dark-card rounded-xl border border-dark-border p-5 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-purple-500/20 flex items-center justify-center">
+                <Loader2 size={16} className="animate-spin text-purple-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-200">
+                    {progressMsg}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-dark-bg rounded-full overflow-hidden mt-2">
+                  <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500 animate-pulse" style={{ width: '35%' }} />
+                </div>
+                <p className="text-xs text-gray-600 mt-1">通常 30 秒~2 分钟完成，请勿关闭页面</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Video Gallery */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold flex items-center gap-2">
+            <span className="w-7 h-7 rounded-lg bg-purple-500/20 flex items-center justify-center">
+              <Video size={14} className="text-purple-400" />
+            </span>
+            已生成的视频
+          </h3>
+          <span className="text-xs text-gray-500">{videos.length} 条</span>
+        </div>
 
         {videos.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 bg-dark-card rounded-xl border border-dark-border">
-            <Video size={48} className="mx-auto mb-3 opacity-30" />
-            <p>还没有视频，输入主题生成吧</p>
+          <div className="text-center py-16 bg-dark-card rounded-xl border border-dark-border">
+            <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mx-auto mb-4">
+              <span className="text-3xl">🎬</span>
+            </div>
+            <p className="text-base text-gray-400 font-medium">还没有视频</p>
+            <p className="text-sm text-gray-600 mt-1 max-w-xs mx-auto">
+              输入主题，点击「LibTV 生成视频」开始创作
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {videos.map(vid => (
-              <div key={vid.id} className="bg-dark-card rounded-xl border border-dark-border overflow-hidden">
-                {vid.videoUrl ? (
-                  <video src={vid.videoUrl} controls className="w-full aspect-video bg-black" />
-                ) : (
-                  <div className="w-full aspect-video bg-dark-bg flex items-center justify-center">
-                    <Video size={40} className="text-gray-700" />
+              <div
+                key={vid.id}
+                className={`group bg-dark-card rounded-xl border overflow-hidden transition-all hover:shadow-lg hover:shadow-purple-900/10 ${
+                  videoDoneRef.current === vid.id
+                    ? 'border-green-500/50 ring-1 ring-green-500/20'
+                    : 'border-dark-border'
+                }`}
+              >
+                {/* Video player */}
+                <div className="relative">
+                  {vid.videoUrl ? (
+                    <video
+                      src={vid.videoUrl}
+                      controls
+                      className="w-full aspect-video bg-black object-cover"
+                      preload="metadata"
+                    />
+                  ) : (
+                    <div className="w-full aspect-video bg-gradient-to-br from-dark-bg to-purple-950/20 flex items-center justify-center">
+                      <div className="text-center">
+                        <Video size={36} className="mx-auto text-gray-600" />
+                        <p className="text-xs text-gray-600 mt-2">生成中...</p>
+                      </div>
+                    </div>
+                  )}
+                  {videoDoneRef.current === vid.id && (
+                    <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1 shadow-lg">
+                      <CheckCircle2 size={10} />
+                      新完成
+                    </div>
+                  )}
+                </div>
+
+                {/* Info */}
+                <div className="p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="text-sm font-medium text-white/90 line-clamp-1">
+                      {vid.subject || '未命名'}
+                    </h4>
                   </div>
-                )}
-                <div className="p-3">
-                  <h4 className="text-sm font-medium truncate">{vid.subject || '未命名'}</h4>
-                  {vid.script && <p className="text-xs text-gray-500 line-clamp-2 mt-1">{vid.script}</p>}
-                  {vid.createdAt && (
-                    <p className="text-[10px] text-gray-600 mt-2 flex items-center gap-1">
-                      <Clock size={10} /> {new Date(vid.createdAt).toLocaleString('zh-CN')}
+
+                  {vid.script && (
+                    <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 leading-relaxed">
+                      {vid.script}
                     </p>
                   )}
-                  <PublishSection text={vid.subject || vid.script || ''} />
+
+                  <div className="flex items-center justify-between mt-3">
+                    <div className="flex items-center gap-1.5">
+                      {vid.createdAt && (
+                        <span className="text-[10px] text-gray-600 flex items-center gap-1">
+                          <Clock size={10} />
+                          {new Date(vid.createdAt).toLocaleDateString('zh-CN', {
+                            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                          })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {vid.videoUrl && (
+                        <a
+                          href={vid.videoUrl}
+                          download
+                          className="p-1.5 rounded-lg text-gray-600 hover:text-blue-400 hover:bg-blue-500/10 transition-all opacity-0 group-hover:opacity-100"
+                          title="下载视频"
+                        >
+                          <Download size={13} />
+                        </a>
+                      )}
+                      <button
+                        onClick={() => handleDeleteVideo(vid.id)}
+                        className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                        title="删除"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Publish */}
+                  <div className="mt-3">
+                    <PublishSection text={vid.subject || vid.script || ''} mediaUrl={vid.videoUrl} />
+                  </div>
                 </div>
               </div>
             ))}
