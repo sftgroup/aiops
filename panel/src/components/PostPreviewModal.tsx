@@ -189,7 +189,7 @@ export default function PostPreviewModal({ text, imageUrl, prompt, onClose, onSa
               {/* 配图 */}
               {imageUrl && (
                 <div className="mx-4 mb-2 rounded-xl overflow-hidden border border-gray-800">
-                  <img src={imageUrl} alt="配图" className="w-full object-contain max-h-72" />
+                  <img src={imageUrl} alt="配图" className="w-full object-contain" style={{ maxHeight: 288 }} />
                 </div>
               )}
 

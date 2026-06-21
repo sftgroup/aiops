@@ -474,8 +474,8 @@ export default function ContentPage() {
               {generatedImage && (
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">配图</label>
-                  <div className="bg-dark-bg rounded-lg overflow-hidden max-h-40">
-                    <img src={generatedImage} alt="配图" className="w-full h-full object-contain" />
+                  <div className="bg-dark-bg rounded-lg overflow-hidden" style={{ maxHeight: 288 }}>
+                    <img src={generatedImage} alt="配图" className="w-full object-contain" style={{ maxHeight: 288 }} />
                   </div>
                   <a href={generatedImage} download className="inline-flex items-center gap-1 mt-2 text-xs text-blue-400 hover:underline">
                     <Download size={12} /> 下载配图
