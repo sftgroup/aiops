@@ -27,7 +27,7 @@ export default function VideoPage() {
   const { token } = useAuth();
   const [subject, setSubject] = useState('');
   const [script, setScript] = useState('');
-  const [duration, setDuration] = useState(30);
+  const [duration, setDuration] = useState(5);
   const [generatingScript, setGeneratingScript] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');

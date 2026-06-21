@@ -58,7 +58,7 @@ function detectStyle(subject) {
 }
 
 function buildPrompt(subject, teamName, options = {}) {
-  const { contentType = 'video', style, duration = 30 } = options;
+  const { contentType = 'video', style, duration = 5 } = options;
   const detected = detectStyle(subject);
   const styleDesc = STYLE_MAP[style || detected] || STYLE_MAP.general;
   if (contentType === 'video') {
@@ -121,19 +121,10 @@ async function getProjectUuid() {
 }
 
 // ─── 生成视频（升级版） ────────────────────────────────
-async function genVideo(subject, teamName, options = {}) {
-  const { model: userModel, duration = 30, style, referenceImage } = options;
-  const { prompt } = buildPrompt(subject, teamName, { contentType: 'video', style, duration });
-  // 根据时长选择合适模型（即使传了 userModel，时长 > 5s 也优先覆盖）
-  let model;
-  if (duration > 5) {
-    // 支持长视频的非VIP模型：Wan 2.6（最长15s）, Seedance1.5 Pro（最长12s）
-    // 注意：-s model= 用 modelName，不是 modelKey
-    model = duration <= 12 ? 'Seedance1.5 Pro' : 'Wan 2.6';
-  } else {
-    model = userModel || await selectBestModel('video');
-  }
-  console.log(`[libtv] Generating video: "${subject.slice(0, 40)}" using ${model}`);
+// ─── 单段视频生成 ──────────────────────────────────
+async function genSingleVideo(prompt, options = {}) {
+  const { model = 'Happy Horse 1.0', duration = 5, referenceImage } = options;
+  console.log(`[libtv] gen segment: ${prompt.slice(0, 50)}... model=${model} ${duration}s`);
   const projectUuid = await getProjectUuid();
   let refUrl = '';
   if (referenceImage && fs.existsSync(referenceImage)) {
@@ -142,7 +133,7 @@ async function genVideo(subject, teamName, options = {}) {
       refUrl = uploadResult?.url || '';
     } catch {}
   }
-  const nodeName = 'vid_' + Date.now().toString(36);
+  const nodeName = 'seg_' + Date.now().toString(36);
   const createArgs = ['node', 'create', nodeName, '-t', 'video', '--prompt', refUrl ? `${prompt} 参考图: ${refUrl}` : prompt, '-s', 'model=' + model];
   if (projectUuid) createArgs.push('-p', projectUuid);
   if (duration) createArgs.push('-s', 'duration=' + duration);
@@ -159,19 +150,80 @@ async function genVideo(subject, teamName, options = {}) {
       if (url) {
         const vidResp = await fetch(url);
         const vidBuf = Buffer.from(await vidResp.arrayBuffer());
-        const vidName = 'libtv_' + Date.now().toString(36) + '.mp4';
+        const vidName = 'seg_' + Date.now().toString(36) + '.mp4';
         fs.writeFileSync(path.join(DATA_DIR, vidName), vidBuf);
         return { url: '/api/file/' + vidName, nodeName, model };
       }
       const progress = nodeData?.data?.progress || '';
       if (progress && progress !== lastProgress) {
-        console.log(`[libtv] ${subject}: ${progress}`);
+        console.log(`[libtv] progress: ${progress}`);
         lastProgress = progress;
       }
     } catch {}
   }
-  console.log(`[libtv] Timeout for: ${subject}`);
+  console.log(`[libtv] Timeout for segment`);
   return { url: '', nodeName: '', model };
+}
+
+// ─── 生成视频（多段拼接） ──────────────────────────────
+async function genVideo(subject, teamName, options = {}) {
+  const { model: userModel, duration = 5, style, referenceImage } = options;
+  // 模型选择：默认用 Happy Horse 1.0（快速可靠、多段拼接时每段 5s）
+  const model = userModel || 'Happy Horse 1.0';
+  const segDuration = 5;
+  const numSegments = Math.ceil(duration / segDuration);
+
+  // 构建各段 prompt
+  function segPrompt(segNum, total) {
+    const angles = ['开场概述', '深入分析', '核心观点', '案例展示', '数据解读', '趋势预测', '总结收尾'];
+    const angle = angles[(segNum - 1) % angles.length];
+    const pos = total === 1 ? '' : `第${segNum}/${total}段 — ${angle}. `;
+    return `${pos}${subject} — ${teamName} 内容. 风格: ${style || '资讯'}, 画面要求: 清晰、信息密度高、适合资讯展示`;
+  }
+
+  // 逐段生成
+  const segFiles = [];
+  for (let i = 0; i < numSegments; i++) {
+    const prompt = segPrompt(i + 1, numSegments);
+    const opts = { model, duration: segDuration };
+    if (i === 0 && referenceImage) opts.referenceImage = referenceImage;
+    const result = await genSingleVideo(prompt, opts);
+    if (result.url) {
+      segFiles.push(result.url.replace('/api/file/', ''));
+      console.log(`[libtv] segment ${i + 1}/${numSegments} done: ${result.url}`);
+    } else {
+      console.log(`[libtv] segment ${i + 1}/${numSegments} FAILED, stopping`);
+      break;
+    }
+  }
+
+  if (segFiles.length === 0) {
+    return { url: '', segments: 0 };
+  }
+
+  // 多段 → ffmpeg 拼接
+  if (segFiles.length > 1) {
+    const mergedName = 'merged_' + Date.now().toString(36) + '.mp4';
+    const listPath = path.join(DATA_DIR, 'clist_' + Date.now().toString(36) + '.txt');
+    const lines = segFiles.map(f => "file '" + path.join(DATA_DIR, f) + "'").join('\n');
+    fs.writeFileSync(listPath, lines);
+    try {
+      const { execSync } = require('child_process');
+      execSync(`ffmpeg -y -f concat -safe 0 -i "${listPath}" -c copy "${path.join(DATA_DIR, mergedName)}"`, { timeout: 120000 });
+      // 清理分段文件
+      for (const f of segFiles) {
+        try { fs.unlinkSync(path.join(DATA_DIR, f)); } catch {}
+      }
+      fs.unlinkSync(listPath);
+      console.log(`[libtv] merged ${segFiles.length} segments -> ${mergedName}`);
+      return { url: '/api/file/' + mergedName, model, segments: segFiles.length };
+    } catch (e) {
+      console.log(`[libtv] merge failed: ${e.message}, returning last segment`);
+      return { url: '/api/file/' + segFiles[segFiles.length - 1], model, segments: 1 };
+    }
+  }
+
+  return { url: '/api/file/' + segFiles[0], model, segments: 1 };
 }
 
 // ─── 生成图片（升级版） ────────────────────────────────
