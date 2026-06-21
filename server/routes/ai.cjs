@@ -6,7 +6,7 @@ const { loadDB, saveDB } = require('../db.cjs');
 const { uuid } = require('../utils/uuid.cjs');
 const { authMiddleware } = require('../middleware/auth.cjs');
 const { CONFIG, DATA_DIR } = require('../config.cjs');
-const { genVideo } = require('../libtv-cli.cjs');
+const { genVideo, genImage } = require('../libtv-cli.cjs');
 
 module.exports = function (app) {
   // GET /api/stats — Dashboard statistics
@@ -125,6 +125,21 @@ module.exports = function (app) {
       });
       const data = await resp.json();
       res.json({ text: data.choices?.[0]?.message?.content || '' });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── AI 生成配图 ───────────────────────────────
+  app.post('/api/ai/image', authMiddleware, async (req, res) => {
+    try {
+      const { subject, style } = req.body;
+      if (!subject) return res.status(400).json({ error: '主题必填' });
+
+      const url = await genImage(subject, 'AI', { style });
+      if (!url) return res.status(500).json({ error: 'LibTV 图片生成失败' });
+
+      res.json({ url });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
