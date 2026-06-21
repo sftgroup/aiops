@@ -1,5 +1,8 @@
 /**
- * ai.cjs — AI generation routes (DeepSeek + video generation + social metadata + file serving)
+ * ai.cjs — AI generation routes (DeepSeek + video/image generation)
+ *
+ * WS-01: WebSocket 实时推送任务进度
+ * Q-01: 任务队列 Worker 串行处理配图生成
  */
 const path = require('path');
 const { loadDB, saveDB } = require('../db.cjs');
@@ -8,8 +11,15 @@ const { authMiddleware } = require('../middleware/auth.cjs');
 const { CONFIG, DATA_DIR } = require('../config.cjs');
 const { genVideo, genImage } = require('../libtv-cli.cjs');
 
-module.exports = function (app) {
-  // GET /api/stats — Dashboard statistics
+module.exports = function (app, ctx) {
+  const { wsBroadcast, taskQueue } = ctx || {};
+
+  // ─── 工具：推送或静默忽略 ───────────────────────────
+  function push(taskId, data) {
+    if (wsBroadcast) wsBroadcast({ type: 'task', taskId, ...data });
+  }
+
+  // GST /api/stats — Dashboard statistics
   app.get('/api/stats', authMiddleware, (req, res) => {
     const contents = loadDB('contents').filter(
       (c) => c.userId === req.user.id
@@ -130,8 +140,8 @@ module.exports = function (app) {
     }
   });
 
-  // ─── AI 生成配图（异步任务 + 进度轮询） ──────────
-  const imageTasks = new Map();
+  // ─── AI 生成配图（队列 + WebSocket 推送） ─────────────
+  const fallbackTasks = new Map(); // 没有 WebSocket 时降级用
 
   app.post('/api/ai/image', authMiddleware, async (req, res) => {
     try {
@@ -139,22 +149,50 @@ module.exports = function (app) {
       if (!subject) return res.status(400).json({ error: '主题必填' });
 
       const taskId = require('crypto').randomUUID();
-      const task = {
-        step: 'starting', progress: 0, message: '初始化...',
+      const taskState = {
+        step: 'queued', progress: 0, message: '排队中...',
         url: null, error: null, createdAt: Date.now(),
       };
-      imageTasks.set(taskId, task);
 
-      // 后台异步生成，不 await
-      genImage(subject, 'AI', { style }, (p) => {
-        Object.assign(task, p);
-      }).then(url => {
-        Object.assign(task, { step: url ? 'completed' : 'failed', progress: url ? 100 : 0, url });
-        // 5分钟后清理
-        setTimeout(() => imageTasks.delete(taskId), 300000);
-      }).catch(e => {
-        Object.assign(task, { step: 'failed', error: e.message });
-      });
+      // 写入状态（供 REST 降级查询）
+      fallbackTasks.set(taskId, taskState);
+
+      // 入队
+      console.log(`[ai] Image task ${taskId} enqueued (queue length: ${taskQueue.length})`);
+      taskQueue.enqueue(async () => {
+        console.log(`[ai] Image task ${taskId} started processing`);
+        // 更新状态 → 开始
+        taskState.step = 'starting';
+        taskState.progress = 5;
+        taskState.message = '初始化...';
+        push(taskId, { step: 'starting', progress: 5, message: '初始化...' });
+
+        try {
+          const url = await genImage(subject, 'AI', { style }, (p) => {
+            // genImage 回调：更新状态 + 推送
+            Object.assign(taskState, p);
+            push(taskId, p);
+          });
+
+          if (url) {
+            taskState.step = 'completed';
+            taskState.progress = 100;
+            taskState.url = url;
+            push(taskId, { step: 'completed', progress: 100, url });
+          } else {
+            taskState.step = 'failed';
+            taskState.error = '配图生成超时或失败';
+            push(taskId, { step: 'failed', error: '配图生成超时或失败' });
+          }
+        } catch (e) {
+          taskState.step = 'failed';
+          taskState.error = e.message;
+          push(taskId, { step: 'failed', error: e.message });
+        }
+
+        // 5 分钟后清理
+        setTimeout(() => fallbackTasks.delete(taskId), 300000);
+      }).catch(() => {});
 
       res.json({ taskId });
     } catch (e) {
@@ -162,9 +200,9 @@ module.exports = function (app) {
     }
   });
 
-  // ─── 配图生成进度查询 ───────────────────────────
+  // ─── 配图状态查询（REST 降级，无 WebSocket 时用） ──
   app.get('/api/ai/image/status/:taskId', authMiddleware, (req, res) => {
-    const task = imageTasks.get(req.params.taskId);
+    const task = fallbackTasks.get(req.params.taskId);
     if (!task) return res.status(404).json({ error: '任务不存在或已过期' });
     res.json(task);
   });

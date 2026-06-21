@@ -1,10 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth, api } from '../AuthContext';
 import toast from 'react-hot-toast';
-import { FileText, Trash2, Loader2, Sparkles, Download } from 'lucide-react';
-import PublishSection from '../components/PublishSection';
+import { FileText, Trash2, Loader2, Sparkles, Download, Eye } from 'lucide-react';
+import PostPreviewModal from '../components/PostPreviewModal';
 
-const LS_KEY = 'aiops_image_task';
+const LS_KEY = '***';
+const DRAFT_KEY = '***';
+
+/** WebSocket 连接地址（自动拼接） */
+function wsUrl() {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}/ws`;
+}
 
 export default function ContentPage() {
   const { token } = useAuth();
@@ -16,65 +23,176 @@ export default function ContentPage() {
   const [generating, setGenerating] = useState(false);
   const [progressStep, setProgressStep] = useState('');
   const [progressBar, setProgressBar] = useState({ step: '', progress: 0, message: '' });
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const pendingTaskId = useRef<string | null>(null);
 
-  const autoSave = async (text: string, imgUrl: string, prompt: string) => {
+  // ─── WebSocket 连接 ───────────────────────────────
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+
+    function connect() {
+      try {
+        ws = new WebSocket(wsUrl());
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          // 如果有进行中的任务，重新订阅
+          if (pendingTaskId.current) {
+            ws!.send(JSON.stringify({ type: 'subscribe', taskId: pendingTaskId.current }));
+          }
+        };
+
+        ws.onmessage = (e) => {
+          try {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'task' && msg.taskId === pendingTaskId.current) {
+              handleWsMessage(msg);
+            }
+          } catch {}
+        };
+
+        ws.onclose = () => {
+          wsRef.current = null;
+          // 3 秒后重连
+          reconnectTimer = setTimeout(connect, 3000);
+        };
+
+        ws.onerror = () => {
+          ws?.close();
+        };
+      } catch {}
+    }
+
+    connect();
+
+    return () => {
+      clearTimeout(reconnectTimer);
+      ws?.close();
+    };
+  }, []);
+
+  // 如果有 pending taskId，重连后自动订阅
+  useEffect(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN && pendingTaskId.current) {
+      wsRef.current.send(JSON.stringify({ type: 'subscribe', taskId: pendingTaskId.current }));
+    }
+  }, [wsRef.current?.readyState]);
+
+  // ─── WebSocket 消息处理 ───────────────────────────
+  const handleWsMessage = useCallback((msg: any) => {
+    const { step, progress, message, iteration, total, url, error } = msg;
+
+    if (step === 'completed') {
+      pendingTaskId.current = null;
+      const imgUrl = url ? '/api/file/' + (url.replace('/api/file/', '') || '') : '';
+      if (imgUrl) setGeneratedImage(imgUrl);
+      setProgressBar({ step: 'completed', progress: 100, message: '配图完成' });
+      setProgressStep('');
+      localStorage.removeItem(LS_KEY);
+
+      // 更新保存的记录
+      if (generatedTextRef.current && aiPromptRef.current) {
+        autoSaveRef.current(generatedTextRef.current, imgUrl, aiPromptRef.current);
+        saveDraftRef.current(aiPromptRef.current, generatedTextRef.current, imgUrl);
+      }
+      loadRef.current();
+      toast.success('已自动保存');
+      setGenerating(false);
+      return;
+    }
+
+    if (step === 'failed' || error) {
+      pendingTaskId.current = null;
+      setProgressBar({ step: 'failed', progress: 0, message: error || '配图生成失败' });
+      toast('配图生成失败，文案已保存', { icon: '⚠️' });
+      localStorage.removeItem(LS_KEY);
+      if (generatedTextRef.current && aiPromptRef.current) {
+        autoSaveRef.current(generatedTextRef.current, '', aiPromptRef.current);
+        saveDraftRef.current(aiPromptRef.current, generatedTextRef.current, '');
+      }
+      setGenerating(false);
+      loadRef.current();
+      return;
+    }
+
+    // 进度更新
+    setProgressBar({ step: progress || step, progress: progress || 0, message: message || '' });
+    setProgressStep(
+      step === 'polling'
+        ? `配图生成中 (${iteration || '?'}/${total || 40})...`
+        : message || '生成中...'
+    );
+  }, []);
+
+  // ─── 草稿持久化 ─────────────────────────────
+  const saveDraft = useCallback((prompt: string, text: string, imageUrl: string) => {
+    try {
+      const draft = { prompt, text, imageUrl, savedAt: Date.now() };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch {}
+  }, []);
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const clearDraft = useCallback(() => {
+    localStorage.removeItem(DRAFT_KEY);
+  }, []);
+
+  const autoSave = useCallback(async (text: string, imgUrl: string, prompt: string) => {
     if (!token) return;
     try {
       const body: any = { title: prompt, text };
       if (imgUrl) body.imageUrl = imgUrl;
       await api(token).post('/contents/text', body);
       load();
-    } catch {}
-  };
+    } catch (e) {
+      console.error('[autoSave] Failed:', e);
+    }
+  }, [token]);
 
-  const startPolling = (taskId: string, text: string, prompt: string) => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(async () => {
-      if (!token) return;
-      try {
-        const status = await api(token).get('/ai/image/status/' + taskId);
-        if (status.step === 'completed') {
-          clearInterval(pollRef.current!);
-          pollRef.current = null;
-          if (status.url) setGeneratedImage(status.url);
-          setProgressBar({ step: 'completed', progress: 100, message: '配图完成' });
-          setProgressStep('');
-          localStorage.removeItem(LS_KEY);
-          // 配图完成了，更新保存的记录（带上图片）
-          await autoSave(text, status.url || '', prompt);
-          load();
-          toast.success('已自动保存');
-          setGenerating(false);
+  const load = useCallback(async () => {
+    if (!token) return;
+    try { setContents(await api(token).get('/contents')); }
+    catch {} finally { setLoading(false); }
+  }, [token]);
+
+  // ─── 用 ref 存最新值（避免 closure 过期） ────────
+  const generatedTextRef = useRef(generatedText);
+  const aiPromptRef = useRef(aiPrompt);
+  const autoSaveRef = useRef(autoSave);
+  const saveDraftRef = useRef(saveDraft);
+  const loadRef = useRef(load);
+
+  useEffect(() => { generatedTextRef.current = generatedText; }, [generatedText]);
+  useEffect(() => { aiPromptRef.current = aiPrompt; }, [aiPrompt]);
+  useEffect(() => { autoSaveRef.current = autoSave; }, [autoSave]);
+  useEffect(() => { saveDraftRef.current = saveDraft; }, [saveDraft]);
+  useEffect(() => { loadRef.current = load; }, [load]);
+
+  // 切换页面/刷新时从 localStorage 恢复草稿
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (Date.now() - draft.savedAt > 7 * 24 * 3600 * 1000) {
+          localStorage.removeItem(DRAFT_KEY);
           return;
         }
-        if (status.step === 'failed' || status.error) {
-          clearInterval(pollRef.current!);
-          pollRef.current = null;
-          setProgressBar({ step: 'failed', progress: 0, message: status.error || '配图生成失败' });
-          toast('配图生成失败，文案已保存', { icon: '⚠️' });
-          localStorage.removeItem(LS_KEY);
-          setGenerating(false);
-          load();
-          return;
-        }
-        setProgressBar({ step: status.step, progress: status.progress || 0, message: status.message || '' });
-        setProgressStep(status.step === 'polling'
-          ? `配图生成中 (${status.iteration || '?'}/${status.total || 30})...`
-          : status.message || '生成中...');
-      } catch (e: any) {
-        const errText = String(e.message || e);
-        if (errText.includes('404') || errText.includes('不存在') || errText.includes('过期')) {
-          clearInterval(pollRef.current!);
-          pollRef.current = null;
-          localStorage.removeItem(LS_KEY);
-          setProgressBar({ step: 'completed', progress: 100, message: '配图任务已结束' });
-          setProgressStep('');
-          setGenerating(false);
-        }
+        if (draft.prompt) setAiPrompt(draft.prompt);
+        if (draft.text) setGeneratedText(draft.text);
+        if (draft.imageUrl) setGeneratedImage(draft.imageUrl);
       }
-    }, 2000);
-  };
+    } catch {}
+  }, []);
+
+  // 切页面时保存草稿
+  useEffect(() => {
+    if (generatedText) {
+      saveDraft(aiPrompt, generatedText, generatedImage);
+    }
+  }, [generatedText, generatedImage, aiPrompt, saveDraft]);
 
   // Restore pending task from localStorage on mount
   useEffect(() => {
@@ -87,17 +205,20 @@ export default function ContentPage() {
           localStorage.removeItem(LS_KEY);
           return;
         }
-        // 至少有 prompt 就恢复
         if (task.prompt) setAiPrompt(task.prompt);
         if (task.text) setGeneratedText(task.text);
 
-        if (task.step === 'image' && task.taskId) {
-          // 配图轮询中 → 恢复轮询
+        if (task.taskId && task.step === 'image') {
+          pendingTaskId.current = task.taskId;
+          // 重连后 ws.onopen 会自动订阅
           setGenerating(true);
           setProgressStep('恢复生成中...');
-          startPolling(task.taskId, task.text, task.prompt);
+          setProgressBar({ step: 'polling', progress: 55, message: '等待 WebSocket 通知...' });
+
+          // 也留一手 REST 降级
+          restorePolling(task.taskId, task.text, task.prompt);
         } else if (task.text) {
-          // 文案已生成，配图未提交 → 重新提交配图任务
+          // 文案已有，配图未提交
           setGenerating(true);
           setProgressStep('恢复生成：提交配图任务...');
           setProgressBar({ step: 'image-start', progress: 55, message: '重新连接 LibTV...' });
@@ -105,10 +226,11 @@ export default function ContentPage() {
             api(token).post('/ai/image', { subject: task.prompt, style: 'general' })
               .then((r: any) => {
                 if (r.taskId) {
-                  task.step = 'image';
+                  pendingTaskId.current = r.taskId;
                   task.taskId = r.taskId;
+                  task.step = 'image';
                   localStorage.setItem(LS_KEY, JSON.stringify(task));
-                  startPolling(r.taskId, task.text, task.prompt);
+                  restorePolling(r.taskId, task.text, task.prompt);
                 }
               }).catch(() => {
                 setGenerating(false);
@@ -116,7 +238,6 @@ export default function ContentPage() {
               });
           }, 100);
         } else if (task.step === 'text') {
-          // 只点了生成但还没等回来，重新触发完整流程
           setGenerating(true);
           setProgressStep('恢复生成中...');
           setProgressBar({ step: 'text', progress: 10, message: '重新生成...' });
@@ -128,26 +249,12 @@ export default function ContentPage() {
     }
   }, [token]);
 
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, []);
-
-  const load = async () => {
-    if (!token) return;
-    try { setContents(await api(token).get('/contents')); }
-    catch {} finally { setLoading(false); }
-  };
-
-  useEffect(() => { load(); }, [token]);
+  useEffect(() => { load(); }, [token, load]);
 
   const handleGenerate = async () => {
     if (!aiPrompt) return toast.error('请输入提示词');
     const prompt = aiPrompt;
 
-    // 立即写入 localStorage，不管 API 调不调得完
     const entry = { step: 'text', prompt, text: '', taskId: '', startedAt: Date.now() };
     localStorage.setItem(LS_KEY, JSON.stringify(entry));
 
@@ -161,40 +268,102 @@ export default function ContentPage() {
 
   const generateFlow = async (prompt: string, entry: any) => {
     try {
-      // Step 1: Generate text via DeepSeek
       const textResult = await api(token!).post('/ai/generate', { prompt, platform: 'twitter' });
       setGeneratedText(textResult.text);
       setProgressBar({ step: 'text', progress: 50, message: '文案生成完成' });
+      saveDraft(prompt, textResult.text, '');
 
-      // 文案一拿到就自动保存，不等配图
       await autoSave(textResult.text, '', prompt);
       toast.success('文案已保存');
 
-      // 更新 localStorage（文案已保存）
       entry.text = textResult.text;
       entry.step = 'text-saved';
       localStorage.setItem(LS_KEY, JSON.stringify(entry));
 
-      // Step 2: Submit image generation task
       setProgressStep('提交配图任务...');
       setProgressBar({ step: 'image-start', progress: 55, message: '正在连接 LibTV...' });
       const taskResult = await api(token!).post('/ai/image', { subject: prompt, style: 'general' });
       const taskId = taskResult.taskId;
       if (!taskId) throw new Error('配图任务创建失败');
 
-      // 更新 localStorage（含 taskId，切回来可轮询）
+      pendingTaskId.current = taskId;
       entry.step = 'image';
       entry.taskId = taskId;
       localStorage.setItem(LS_KEY, JSON.stringify(entry));
 
-      // Start polling
-      startPolling(taskId, textResult.text, prompt);
+      // WebSocket 为主，同时启动 REST 降级轮询兜底
+      setProgressStep('排队中...');
+      setProgressBar({ step: 'queued', progress: 55, message: '已提交，等待队列处理...' });
+      restorePolling(taskId, textResult.text, prompt);
     } catch (e: any) {
       toast.error(e.message || '生成失败');
       localStorage.removeItem(LS_KEY);
       setGenerating(false);
     }
   };
+
+  // ─── REST 降级轮询（以防 WebSocket 断连） ─────────
+  const restorePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const restorePolling = (taskId: string, text: string, prompt: string) => {
+    if (restorePollingRef.current) clearInterval(restorePollingRef.current);
+    restorePollingRef.current = setInterval(async () => {
+      if (!token) return;
+      try {
+        const status = await api(token).get('/ai/image/status/' + taskId);
+        if (status.step === 'completed') {
+          clearInterval(restorePollingRef.current!);
+          restorePollingRef.current = null;
+          pendingTaskId.current = null;
+          const url = '/api/file/' + (status.url?.replace('/api/file/', '') || '');
+          if (url) setGeneratedImage(url);
+          setProgressBar({ step: 'completed', progress: 100, message: '配图完成' });
+          setProgressStep('');
+          localStorage.removeItem(LS_KEY);
+          await autoSave(text, url || '', prompt);
+          saveDraft(prompt, text, url || '');
+          load();
+          toast.success('已自动保存');
+          setGenerating(false);
+          return;
+        }
+        if (status.step === 'failed' || status.error) {
+          clearInterval(restorePollingRef.current!);
+          restorePollingRef.current = null;
+          pendingTaskId.current = null;
+          setProgressBar({ step: 'failed', progress: 0, message: status.error || '配图生成失败' });
+          toast('配图生成失败，文案已保存', { icon: '⚠️' });
+          localStorage.removeItem(LS_KEY);
+          await autoSave(text, '', prompt);
+          saveDraft(prompt, text, '');
+          setGenerating(false);
+          load();
+          return;
+        }
+        setProgressBar({ step: status.step, progress: status.progress || 0, message: status.message || '' });
+        setProgressStep(status.step === 'polling'
+          ? `配图生成中 (${status.iteration || '?'}/${status.total || 40})...`
+          : status.message || '生成中...');
+      } catch (e: any) {
+        const errText = String(e.message || e);
+        if (errText.includes('404') || errText.includes('不存在') || errText.includes('过期')) {
+          clearInterval(restorePollingRef.current!);
+          restorePollingRef.current = null;
+          localStorage.removeItem(LS_KEY);
+          setProgressBar({ step: 'completed', progress: 100, message: '配图任务已结束' });
+          setProgressStep('');
+          setGenerating(false);
+        }
+      }
+    }, 5000); // 降级轮询 5s 一次，减少请求
+  };
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (restorePollingRef.current) clearInterval(restorePollingRef.current);
+    };
+  }, []);
 
   const handleDelete = async (id: string) => {
     try {
@@ -204,9 +373,28 @@ export default function ContentPage() {
     } catch (e: any) { toast.error(e.message); }
   };
 
+  const handlePreviewClose = () => {
+    setShowPreview(false);
+  };
+
+  const handlePreviewSaved = (newText: string) => {
+    setGeneratedText(newText);
+    saveDraft(aiPrompt, newText, generatedImage);
+  };
+
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6">📝 文案生成</h2>
+
+      {showPreview && (
+        <PostPreviewModal
+          text={generatedText}
+          imageUrl={generatedImage}
+          prompt={aiPrompt}
+          onClose={handlePreviewClose}
+          onSaved={handlePreviewSaved}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Left: Generate */}
@@ -221,14 +409,26 @@ export default function ContentPage() {
             disabled={generating}
           />
 
-          <button
-            onClick={handleGenerate}
-            disabled={generating || !aiPrompt}
-            className="flex items-center gap-2 px-4 py-2 bg-accent-primary rounded-lg text-sm font-medium hover:bg-accent-primary/80 transition-colors disabled:opacity-50"
-          >
-            {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-            {generating ? '生成中...' : 'AI 生成'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleGenerate}
+              disabled={generating || !aiPrompt}
+              className="flex items-center gap-2 px-4 py-2 bg-accent-primary rounded-lg text-sm font-medium hover:bg-accent-primary/80 transition-colors disabled:opacity-50"
+            >
+              {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {generating ? '生成中...' : 'AI 生成'}
+            </button>
+
+            {generatedText && !generating && (
+              <button
+                onClick={() => setShowPreview(true)}
+                className="flex items-center gap-1.5 px-3 py-2 border border-accent-primary/50 text-accent-primary rounded-lg text-xs hover:bg-accent-primary/10 transition-colors"
+              >
+                <Eye size={15} />
+                预览发布
+              </button>
+            )}
+          </div>
 
           {/* Progress */}
           {generating && (
@@ -253,13 +453,13 @@ export default function ContentPage() {
             </div>
           )}
 
-          {/* Generated Result */}
+          {/* Generated Result Summary */}
           {(generatedText || generating) && (
-            <div className={`space-y-4 pt-2 border-t border-dark-border ${!generatedText ? 'opacity-50' : ''}`}>
+            <div className={`space-y-3 pt-2 border-t border-dark-border ${!generatedText ? 'opacity-50' : ''}`}>
               {generatedText && (
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">生成文案</label>
-                  <div className="bg-dark-bg rounded-lg p-3 text-sm leading-relaxed whitespace-pre-wrap">
+                  <div className="bg-dark-bg rounded-lg p-3 text-sm leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
                     {generatedText}
                   </div>
                 </div>
@@ -268,8 +468,8 @@ export default function ContentPage() {
               {generatedImage && (
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">配图</label>
-                  <div className="bg-dark-bg rounded-lg overflow-hidden">
-                    <img src={generatedImage} alt="配图" className="w-full max-h-64 object-contain" />
+                  <div className="bg-dark-bg rounded-lg overflow-hidden max-h-40">
+                    <img src={generatedImage} alt="配图" className="w-full h-full object-contain" />
                   </div>
                   <a href={generatedImage} download className="inline-flex items-center gap-1 mt-2 text-xs text-blue-400 hover:underline">
                     <Download size={12} /> 下载配图
@@ -277,7 +477,12 @@ export default function ContentPage() {
                 </div>
               )}
 
-              {generatedText && <PublishSection text={generatedText} />}
+              {generatedText && !generating && (
+                <p className="text-xs text-gray-500 flex items-center gap-1">
+                  <Eye size={11} />
+                  点击「预览发布」查看帖子效果、编辑文案、发布到社交媒体
+                </p>
+              )}
             </div>
           )}
         </div>

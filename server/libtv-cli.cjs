@@ -56,17 +56,12 @@ function buildPrompt(subject, teamName, options = {}) {
   const styleDesc = STYLE_MAP[style || detected] || STYLE_MAP.general;
   if (contentType === 'video') {
     return {
-      prompt: `${subject} — ${teamName} 内容
-风格: ${styleDesc}
-时长: ${duration}秒
-画面要求: 清晰、信息密度高、适合资讯展示`,
+      prompt: `${subject} — ${teamName} 内容. 风格: ${styleDesc.replace(/\n/g, ' ')}, 时长: ${duration}秒. 画面要求: 清晰、信息密度高、适合资讯展示`,
       model: '',
     };
   } else {
     return {
-      prompt: `${subject}
-风格: ${styleDesc}
-高质量、细节丰富`,
+      prompt: `${subject}. 风格: ${styleDesc.replace(/\n/g, ' ')}, 高质量、细节丰富`,
       model: '',
     };
   }
@@ -129,11 +124,15 @@ async function genVideo(subject, teamName, options = {}) {
     } catch {}
   }
   const nodeName = 'vid_' + Date.now().toString(36);
-  const params = ['node', 'create', nodeName, '-t', 'video', '--prompt', refUrl ? `${prompt} 参考图: ${refUrl}` : prompt, '-s', 'model=' + model];
-  if (projectUuid) params.push('-p', projectUuid);
-  if (duration) params.push('-s', 'duration=' + duration);
-  params.push('-r');
-  await libtvExec(params, 10).catch(() => null);
+  const createArgs = ['node', 'create', nodeName, '-t', 'video', '--prompt', refUrl ? `${prompt} 参考图: ${refUrl}` : prompt, '-s', 'model=' + model];
+  if (projectUuid) createArgs.push('-p', projectUuid);
+  if (duration) createArgs.push('-s', 'duration=' + duration);
+  try {
+    await libtvExec(createArgs, 15);
+  } catch (e) {
+    console.error('[libtv] Video node create failed:', e.message);
+    return { url: '', nodeName: '', model };
+  }
   let lastProgress = '';
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 5000));
@@ -177,13 +176,20 @@ async function genImage(subject, teamName, options = {}, onProgress) {
     } catch {}
   }
   const nodeName = 'img_' + Date.now().toString(36);
-  const createArgs = ['node', 'create', nodeName, '-t', 'image', '--prompt', refUrl ? `${prompt} 参考图: ${refUrl}` : prompt, '-s', 'model=' + model, '-r'];
+  const createArgs = ['node', 'create', nodeName, '-t', 'image', '--prompt', refUrl ? `${prompt} 参考图: ${refUrl}` : prompt, '-s', 'model=' + model];
   if (projectUuid) createArgs.push('-p', projectUuid);
-  await libtvExec(createArgs, 10).catch(() => null);
+  try {
+    await libtvExec(createArgs, 30);
+  } catch (e) {
+    if (onProgress) onProgress({ step: 'create-failed', progress: 0, message: `节点创建失败: ${e.message}` });
+    console.error('[libtv] Image node create failed:', e.message);
+    return '';
+  }
   if (onProgress) onProgress({ step: 'created', progress: 20, message: '节点已创建，等待生成...' });
-  for (let i = 0; i < 20; i++) {
+  const MAX_ROUNDS = 40;
+  for (let i = 0; i < MAX_ROUNDS; i++) {
     await new Promise(r => setTimeout(r, 3000));
-    if (onProgress) onProgress({ step: 'polling', progress: 20 + Math.round((i / 20) * 72), message: `检测第 ${i + 1}/${20} 轮...`, iteration: i + 1, total: 20 });
+    if (onProgress) onProgress({ step: 'polling', progress: 20 + Math.round((i / MAX_ROUNDS) * 72), message: `检测第 ${i + 1}/${MAX_ROUNDS} 轮...`, iteration: i + 1, total: MAX_ROUNDS });
     try {
       const getArgs = ['node', nodeName];
       if (projectUuid) getArgs.push('-p', projectUuid);

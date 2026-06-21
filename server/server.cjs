@@ -7,6 +7,7 @@
  * BE-03: 三个发布端点合并为一个
  * BE-04: var→const/let, require 统一头部, 优雅关闭
  * SE-01: Twitter 凭据 AES-256 加密
+ * WS-01: WebSocket 服务 (/ws) 用于任务进度实时推送
  */
 require('dotenv').config();
 
@@ -14,6 +15,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const { WebSocketServer } = require('ws');
 
 const { loadDB, saveDB } = require('./db.cjs');
 const { CONFIG } = require('./config.cjs');
@@ -50,7 +52,80 @@ app.use('/api/file', (req, res, next) => {
 });
 app.use('/api/file', express.static(DATA_DIR));
 
-// ─── Mount Routes ────────────────────────────────────────
+// ─── WebSocket 服务 ─────────────────────────────────────
+const server = require('http').createServer(app);
+const wss = new WebSocketServer({ server, path: '/ws' });
+
+// 存储所有连接的客户端
+const wsClients = new Set();
+
+wss.on('connection', (ws) => {
+  wsClients.add(ws);
+  ws.isAlive = true;
+  console.log(`[ws] Client connected (total: ${wsClients.size})`);
+
+  ws.on('pong', () => { ws.isAlive = true; });
+  ws.on('close', () => {
+    wsClients.delete(ws);
+    console.log(`[ws] Client disconnected (total: ${wsClients.size})`);
+  });
+  ws.on('error', (e) => {
+    wsClients.delete(ws);
+    console.error('[ws] Error:', e.message);
+  });
+});
+
+// 心跳保活
+const heartbeatTimer = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) return ws.terminate();
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
+
+// 广播函数：向所有连接推送 JSON 消息
+function wsBroadcast(data) {
+  const msg = JSON.stringify(data);
+  for (const ws of wsClients) {
+    if (ws.readyState === 1) ws.send(msg);
+  }
+}
+
+// ─── 任务队列 ────────────────────────────────────────────
+const taskQueue = {
+  _tasks: [],
+  _running: false,
+  _imageTasks: new Map(), // taskId → task status (kept for REST polling compat)
+
+  enqueue(taskFn) {
+    return new Promise((resolve, reject) => {
+      this._tasks.push({ taskFn, resolve, reject });
+      this._processNext();
+    });
+  },
+
+  async _processNext() {
+    if (this._running || this._tasks.length === 0) return;
+    this._running = true;
+    const { taskFn, resolve, reject } = this._tasks.shift();
+    try {
+      const result = await taskFn();
+      resolve(result);
+    } catch (e) {
+      reject(e);
+    } finally {
+      this._running = false;
+      setImmediate(() => this._processNext());
+    }
+  },
+
+  get length() { return this._tasks.length; },
+  get isRunning() { return this._running; },
+};
+
+// ─── Mount Routes (pass WebSocket broadcast + queue) ────
+const routeContext = { wsBroadcast, taskQueue };
 require('./routes/auth.cjs')(app);
 require('./routes/contents.cjs')(app);
 require('./routes/accounts.cjs')(app);
@@ -59,7 +134,7 @@ require('./routes/team.cjs')(app);
 require('./routes/settings.cjs')(app);
 require("./routes/teams.cjs")(app);
 require('./routes/oauth.cjs')(app);
-require('./routes/ai.cjs')(app);
+require('./routes/ai.cjs')(app, routeContext);
 
 // ─── Serve Static (built frontend) ───────────────────────
 const PANEL_DIST = path.join(__dirname, '..', 'panel', 'dist');
@@ -89,18 +164,19 @@ if (!CONFIG.twitterConsumerKey || !CONFIG.twitterConsumerSecret) {
 }
 
 // ─── Startup ──────────────────────────────────────────────
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server ready on port ${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server ready on port ${PORT} (REST + WebSocket /ws)`);
 });
 
 // ─── Graceful Shutdown ──────────────────────────────────
 function gracefulShutdown(signal) {
   console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+  clearInterval(heartbeatTimer);
+  wss.close();
   server.close(() => {
     console.log('Server closed.');
     process.exit(0);
   });
-  // Force exit after 5s
   setTimeout(() => {
     console.error('Forced shutdown after timeout.');
     process.exit(1);
