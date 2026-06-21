@@ -124,17 +124,14 @@ async function getProjectUuid() {
 async function genVideo(subject, teamName, options = {}) {
   const { model: userModel, duration = 30, style, referenceImage } = options;
   const { prompt } = buildPrompt(subject, teamName, { contentType: 'video', style, duration });
-  // 根据时长选择合适模型
-  let model = userModel;
-  if (!model) {
+  // 根据时长选择合适模型（即使传了 userModel，时长 > 5s 也优先覆盖）
+  let model;
+  if (duration > 5) {
     // 支持长视频的非VIP模型：Wan 2.6（最长15s）, Seedance1.5 Pro（最长12s）
-    // Wan 2.6（最长15秒）、Seedance1.5 Pro（最长12秒）都是非VIP
-    if (duration > 5) {
-      // 注意：-s model= 用 modelName，不是 modelKey
-      model = duration <= 12 ? 'Seedance1.5 Pro' : 'Wan 2.6';
-    } else {
-      model = await selectBestModel('video');
-    }
+    // 注意：-s model= 用 modelName，不是 modelKey
+    model = duration <= 12 ? 'Seedance1.5 Pro' : 'Wan 2.6';
+  } else {
+    model = userModel || await selectBestModel('video');
   }
   console.log(`[libtv] Generating video: "${subject.slice(0, 40)}" using ${model}`);
   const projectUuid = await getProjectUuid();
