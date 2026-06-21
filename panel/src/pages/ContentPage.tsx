@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth, api } from '../AuthContext';
 import toast from 'react-hot-toast';
-import { FileText, Image, Trash2, Loader2, Sparkles, Download } from 'lucide-react';
+import { FileText, Trash2, Loader2, Sparkles, Download } from 'lucide-react';
 import PublishSection from '../components/PublishSection';
+
+const LS_KEY = 'aiops_image_task';
 
 export default function ContentPage() {
   const { token } = useAuth();
@@ -14,7 +16,83 @@ export default function ContentPage() {
   const [generating, setGenerating] = useState(false);
   const [progressStep, setProgressStep] = useState('');
   const [progressBar, setProgressBar] = useState({ step: '', progress: 0, message: '' });
-  const [saving, setSaving] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const autoSave = async (text: string, imgUrl: string, prompt: string) => {
+    if (!token) return;
+    try {
+      const body: any = { title: prompt, text };
+      if (imgUrl) body.imageUrl = imgUrl;
+      await api(token).post('/contents/text', body);
+      load();
+    } catch {}
+  };
+
+  const startPolling = (taskId: string, text: string, prompt: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      if (!token) return;
+      try {
+        const status = await api(token).get('/ai/image/status/' + taskId);
+        if (status.step === 'completed') {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          if (status.url) setGeneratedImage(status.url);
+          setProgressBar({ step: 'completed', progress: 100, message: '配图完成' });
+          setProgressStep('');
+          localStorage.removeItem(LS_KEY);
+          await autoSave(text, status.url || '', prompt);
+          toast.success('已自动保存');
+          setGenerating(false);
+          return;
+        }
+        if (status.step === 'failed' || status.error) {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          setProgressBar({ step: 'failed', progress: 0, message: status.error || '配图生成失败' });
+          toast.error('配图生成失败，文案已显示');
+          localStorage.removeItem(LS_KEY);
+          await autoSave(text, '', prompt);
+          toast.success('文案已保存');
+          setGenerating(false);
+          return;
+        }
+        setProgressBar({ step: status.step, progress: status.progress || 0, message: status.message || '' });
+        setProgressStep(status.step === 'polling'
+          ? `配图生成中 (${status.iteration || '?'}/${status.total || 30})...`
+          : status.message || '生成中...');
+      } catch {}
+    }, 2000);
+  };
+
+  // Restore pending task from localStorage on mount
+  useEffect(() => {
+    if (!token) return;
+    const saved = localStorage.getItem(LS_KEY);
+    if (saved) {
+      try {
+        const task = JSON.parse(saved);
+        if (Date.now() - task.startedAt < 300000) { // 5 min timeout
+          setAiPrompt(task.prompt);
+          setGeneratedText(task.generatedText);
+          setGenerating(true);
+          setProgressStep('恢复生成中...');
+          startPolling(task.taskId, task.generatedText, task.prompt);
+        } else {
+          localStorage.removeItem(LS_KEY);
+        }
+      } catch {
+        localStorage.removeItem(LS_KEY);
+      }
+    }
+  }, [token]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   const load = async () => {
     if (!token) return;
@@ -31,84 +109,33 @@ export default function ContentPage() {
     setProgressBar({ step: 'text', progress: 10, message: '调用 DeepSeek API...' });
     setGeneratedText('');
     setGeneratedImage('');
+    generateFlow(aiPrompt);
+  };
+
+  const generateFlow = async (prompt: string) => {
     try {
       // Step 1: Generate text via DeepSeek
-      const textResult = await api(token!).post('/ai/generate', {
-        prompt: aiPrompt,
-        platform: 'twitter',
-      });
+      const textResult = await api(token!).post('/ai/generate', { prompt, platform: 'twitter' });
       setGeneratedText(textResult.text);
       setProgressBar({ step: 'text', progress: 50, message: '文案生成完成' });
 
-      // Step 2: Generate matching image (async with polling)
-      setProgressStep('正在生成配图...');
-      setProgressBar({ step: 'image-start', progress: 55, message: '提交配图任务...' });
-      const taskResult = await api(token!).post('/ai/image', {
-        subject: aiPrompt,
-        style: 'general',
-      });
+      // Step 2: Submit image generation task
+      setProgressStep('提交配图任务...');
+      setProgressBar({ step: 'image-start', progress: 55, message: '正在连接 LibTV...' });
+      const taskResult = await api(token!).post('/ai/image', { subject: prompt, style: 'general' });
       const taskId = taskResult.taskId;
       if (!taskId) throw new Error('配图任务创建失败');
 
-      // Poll for progress
-      setProgressStep('正在生成配图，等待 LibTV...');
-      const poll = setInterval(async () => {
-        try {
-          const status = await api(token!).get('/ai/image/status/' + taskId);
-          if (status.step === 'completed') {
-            clearInterval(poll);
-            if (status.url) setGeneratedImage(status.url);
-            setProgressBar({ step: 'completed', progress: 100, message: '配图完成' });
-            setProgressStep('');
+      // Save to localStorage so it survives tab switches
+      localStorage.setItem(LS_KEY, JSON.stringify({
+        taskId, prompt, generatedText: textResult.text, startedAt: Date.now(),
+      }));
 
-            // Auto-save
-            try {
-              await api(token!).post('/contents/text', {
-                title: aiPrompt,
-                text: textResult.text,
-                imageUrl: status.url || '',
-              });
-              toast.success('已自动保存');
-              load();
-            } catch {}
-            setGenerating(false);
-            return;
-          }
-          if (status.step === 'failed' || status.error) {
-            clearInterval(poll);
-            setProgressBar({ step: 'failed', progress: 0, message: status.error || '配图生成失败' });
-            toast.error('配图生成失败，文案已显示');
-            setGenerating(false);
-            // Still auto-save text even if image failed
-            try {
-              await api(token!).post('/contents/text', {
-                title: aiPrompt,
-                text: textResult.text,
-              });
-              toast.success('文案已保存');
-              load();
-            } catch {}
-            return;
-          }
-          // Update progress bar
-          setProgressBar({ step: status.step, progress: status.progress || 0, message: status.message || '' });
-          setProgressStep(status.step === 'polling'
-            ? `配图生成中 (${status.iteration || '?'}/${status.total || 30})...`
-            : status.message || '生成中...');
-        } catch (e: any) {
-          // Ignore poll errors
-        }
-      }, 2000);
-
-      // Safety timeout
-      setTimeout(() => {
-        clearInterval(poll);
-        setGenerating(false);
-        setProgressStep('');
-      }, 180000);
-
+      // Start polling
+      startPolling(taskId, textResult.text, prompt);
     } catch (e: any) {
       toast.error(e.message || '生成失败');
+      localStorage.removeItem(LS_KEY);
       setGenerating(false);
     }
   };
@@ -126,11 +153,10 @@ export default function ContentPage() {
       <h2 className="text-2xl font-bold mb-6">📝 文案生成</h2>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Generate: Text + Image */}
+        {/* Left: Generate */}
         <div className="bg-dark-card rounded-xl p-5 border border-dark-border space-y-4">
           <h3 className="font-semibold">AI 生成文案 + 配图</h3>
 
-          {/* Prompt Input */}
           <textarea
             className="w-full px-3 py-2.5 bg-dark-bg border border-dark-border rounded-lg text-white focus:outline-none h-20 resize-none"
             placeholder="描述你想要的内容，例如：写一条关于AI创业的Twitter帖子"
@@ -139,7 +165,6 @@ export default function ContentPage() {
             disabled={generating}
           />
 
-          {/* Generate Button */}
           <button
             onClick={handleGenerate}
             disabled={generating || !aiPrompt}
@@ -149,12 +174,12 @@ export default function ContentPage() {
             {generating ? '生成中...' : 'AI 生成'}
           </button>
 
-          {/* Progress Bar */}
+          {/* Progress */}
           {generating && (
             <div className="space-y-2">
               <div className="w-full h-2 bg-dark-bg rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 ${
+                  className={`h-full rounded-full transition-all duration-700 ${
                     progressBar.progress < 50 ? 'bg-blue-500' :
                     progressBar.progress < 90 ? 'bg-yellow-500' :
                     'bg-green-500'
@@ -173,44 +198,35 @@ export default function ContentPage() {
           )}
 
           {/* Generated Result */}
-          {generatedText && (
-            <div className="space-y-4 pt-2 border-t border-dark-border">
-              {/* Text */}
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">生成文案</label>
-                <div className="bg-dark-bg rounded-lg p-3 text-sm leading-relaxed whitespace-pre-wrap">
-                  {generatedText}
+          {(generatedText || generating) && (
+            <div className={`space-y-4 pt-2 border-t border-dark-border ${!generatedText ? 'opacity-50' : ''}`}>
+              {generatedText && (
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">生成文案</label>
+                  <div className="bg-dark-bg rounded-lg p-3 text-sm leading-relaxed whitespace-pre-wrap">
+                    {generatedText}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Image */}
               {generatedImage && (
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">配图</label>
                   <div className="bg-dark-bg rounded-lg overflow-hidden">
-                    <img
-                      src={generatedImage}
-                      alt="配图"
-                      className="w-full max-h-64 object-contain"
-                    />
+                    <img src={generatedImage} alt="配图" className="w-full max-h-64 object-contain" />
                   </div>
-                  <a
-                    href={generatedImage}
-                    download
-                    className="inline-flex items-center gap-1 mt-2 text-xs text-blue-400 hover:underline"
-                  >
+                  <a href={generatedImage} download className="inline-flex items-center gap-1 mt-2 text-xs text-blue-400 hover:underline">
                     <Download size={12} /> 下载配图
                   </a>
                 </div>
               )}
 
-              {/* Publish */}
               {generatedText && <PublishSection text={generatedText} />}
             </div>
           )}
         </div>
 
-        {/* Content List */}
+        {/* Right: History */}
         <div className="bg-dark-card rounded-xl p-5 border border-dark-border space-y-3">
           <h3 className="font-semibold">历史记录</h3>
 
