@@ -34,6 +34,7 @@ export default function App() {
             <Route path="publish" element={<PublishPage />} />
             <Route path="accounts" element={<AccountsPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="team-workflow" element={<Navigate to="/teams" replace />} />
             <Route path="teams" element={<TeamWorkflowPage />} />
           </Route>
         </Routes>
