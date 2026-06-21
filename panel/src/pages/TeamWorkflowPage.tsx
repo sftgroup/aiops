@@ -265,10 +265,11 @@ function EditTeamModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-gray-850 border border-gray-700 rounded-2xl w-[720px] max-h-[90vh] overflow-y-auto p-8 shadow-2xl">
-        <h2 className="text-xl font-semibold text-white mb-6">
+      <div className="bg-gray-850 border border-gray-700 rounded-2xl w-[720px] max-h-[90vh] shadow-2xl flex flex-col">
+        <h2 className="text-xl font-semibold text-white mb-6 shrink-0 px-8 pt-8">
           {isNew ? '创建运营团队' : '编辑运营团队'}
         </h2>
+        <div className="overflow-y-auto px-8 flex-1 min-h-0">
 
         {/* Name */}
         <div className="mb-5">
@@ -415,8 +416,9 @@ function EditTeamModal({
           )}
         </div>
 
+        </div>
         {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
+        <div className="flex justify-end gap-3 px-8 py-4 border-t border-gray-700 shrink-0">
           <button onClick={onClose} className="px-5 py-2.5 border border-gray-600 rounded-lg text-gray-400 hover:text-white transition-colors">
             取消
           </button>
