@@ -11,6 +11,7 @@ import SettingsPage from './pages/SettingsPage';
 import VideoPage from './pages/VideoPage';
 import TeamWorkflowPage from './pages/TeamWorkflowPage';
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -26,7 +27,7 @@ export default function App() {
         <Toaster position="top-right" toastOptions={{ style: { background: '#1a1a2e', color: '#fff', border: '1px solid #2a2a3e' } }} />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route path="/" element={<ProtectedRoute><ErrorBoundary><Layout /></ErrorBoundary></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="videos" element={<VideoPage />} />
             <Route path="content" element={<ContentPage />} />

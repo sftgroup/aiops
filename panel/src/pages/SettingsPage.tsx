@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth, api } from '../AuthContext';
-import { Save, Loader2, CheckCircle2, AlertCircle, ExternalLink, Copy } from 'lucide-react';
+import { Save, Loader2, CheckCircle2, AlertCircle, ExternalLink, Copy, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface Config {
@@ -62,6 +62,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ status: string; message: string } | null>(null);
+  const [showFields, setShowFields] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     loadConfig();
@@ -106,6 +107,10 @@ export default function SettingsPage() {
     } catch (e: any) { setTestResult({ status: 'error', message: e.message }); toast.error(e.message); }
   };
 
+  const toggleShow = (key: string) => {
+    setShowFields(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 size={32} className="animate-spin text-gray-400" /></div>;
 
   const set = (k: keyof Config) => (e: React.ChangeEvent<HTMLInputElement>) => setConfig(p => ({ ...p, [k]: e.target.value }));
@@ -130,14 +135,19 @@ export default function SettingsPage() {
         {/* LLM / DeepSeek */}
         <ConfigCard title="🤖 LLM / AI 文案生成" desc="用于视频脚本生成和文案创作">
           <ConfigRow label="DeepSeek API Key">
-            <div className="flex gap-2">
-              <input type="password" value={config.deepseek_key} onChange={set('deepseek_key')}
-                placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" className="flex-1 px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm" />
-              <button onClick={() => saveSection('llm', { deepseek_key: config.deepseek_key })} disabled={saving === 'llm'}
-                className="px-4 py-2 bg-accent-primary/50 rounded-lg text-sm hover:bg-accent-primary/70 disabled:opacity-50">
-                {saving === 'llm' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              </button>
-            </div>
+            <PasswordField
+              value={config.deepseek_key}
+              onChange={set('deepseek_key')}
+              placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              show={showFields['deepseek_key']}
+              onToggle={() => toggleShow('deepseek_key')}
+              button={
+                <button onClick={() => saveSection('llm', { deepseek_key: config.deepseek_key })} disabled={saving === 'llm'}
+                  className="px-4 py-2 bg-accent-primary/50 rounded-lg text-sm hover:bg-accent-primary/70 disabled:opacity-50">
+                  {saving === 'llm' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                </button>
+              }
+            />
             <div className="flex gap-2 mt-2">
               <button onClick={testDeepSeek} className="text-xs px-3 py-1.5 bg-dark-border rounded-lg hover:bg-gray-600">
                 测试连接
@@ -155,14 +165,19 @@ export default function SettingsPage() {
         {/* LibTV AI Media Generation */}
         <ConfigCard title="🎨 LibTV AI 媒体生成" desc="替代火山引擎。支持图片、视频、音频。14+ 生图模型 / 30+ 生视频模型 / 5+ 音频合成模型">
           <ConfigRow label="LibTV Token">
-            <div className="flex gap-2">
-              <input type="password" value={config.libtv_token} onChange={set('libtv_token')}
-                placeholder="从浏览器 Cookie 获取 usertoken" className="flex-1 px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm" />
-              <button onClick={() => saveSection('libtv', { libtv_token: config.libtv_token })} disabled={saving === 'libtv'}
-                className="px-4 py-2 bg-accent-primary/50 rounded-lg text-sm hover:bg-accent-primary/70 disabled:opacity-50">
-                {saving === 'libtv' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              </button>
-            </div>
+            <PasswordField
+              value={config.libtv_token}
+              onChange={set('libtv_token')}
+              placeholder="从浏览器 Cookie 获取 usertoken"
+              show={showFields['libtv_token']}
+              onToggle={() => toggleShow('libtv_token')}
+              button={
+                <button onClick={() => saveSection('libtv', { libtv_token: config.libtv_token })} disabled={saving === 'libtv'}
+                  className="px-4 py-2 bg-accent-primary/50 rounded-lg text-sm hover:bg-accent-primary/70 disabled:opacity-50">
+                  {saving === 'libtv' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                </button>
+              }
+            />
           </ConfigRow>
           <ConfigRow label="图片生成模型">
             <select value={config.libtv_image_model} onChange={e => setConfig(p => ({ ...p, libtv_image_model: e.target.value }))}
@@ -212,21 +227,24 @@ export default function SettingsPage() {
           clientId={config.facebook_client_id} clientSecret={config.facebook_client_secret}
           onClientId={set('facebook_client_id')} onClientSecret={set('facebook_client_secret')}
           onSave={() => saveSection('facebook', { facebook_client_id: config.facebook_client_id, facebook_client_secret: config.facebook_client_secret })}
-          saving={saving === 'facebook'} baseUrl={config.oauth_base_url} />
+          saving={saving === 'facebook'} baseUrl={config.oauth_base_url}
+          showSecret={showFields['facebook_client_secret']} onToggleSecret={() => toggleShow('facebook_client_secret')} />
 
         {/* YouTube */}
         <OAuthConfigCard title="▶️ YouTube / Google" platform="youtube" help={OAUTH_HELP.youtube}
           clientId={config.youtube_client_id} clientSecret={config.youtube_client_secret}
           onClientId={set('youtube_client_id')} onClientSecret={set('youtube_client_secret')}
           onSave={() => saveSection('youtube', { youtube_client_id: config.youtube_client_id, youtube_client_secret: config.youtube_client_secret })}
-          saving={saving === 'youtube'} baseUrl={config.oauth_base_url} />
+          saving={saving === 'youtube'} baseUrl={config.oauth_base_url}
+          showSecret={showFields['youtube_client_secret']} onToggleSecret={() => toggleShow('youtube_client_secret')} />
 
         {/* Reddit */}
         <OAuthConfigCard title="🔴 Reddit" platform="reddit" help={OAUTH_HELP.reddit}
           clientId={config.reddit_client_id} clientSecret={config.reddit_client_secret}
           onClientId={set('reddit_client_id')} onClientSecret={set('reddit_client_secret')}
           onSave={() => saveSection('reddit', { reddit_client_id: config.reddit_client_id, reddit_client_secret: config.reddit_client_secret })}
-          saving={saving === 'reddit'} baseUrl={config.oauth_base_url} />
+          saving={saving === 'reddit'} baseUrl={config.oauth_base_url}
+          showSecret={showFields['reddit_client_secret']} onToggleSecret={() => toggleShow('reddit_client_secret')} />
 
         {/* OAuth Base URL */}
         <ConfigCard title="🔗 OAuth 回调地址" desc="各平台 OAuth 授权后重定向的地址">
@@ -245,12 +263,22 @@ export default function SettingsPage() {
         {/* Pexels / Pixabay */}
         <ConfigCard title="🎬 视频素材 API" desc="用于视频生成时自动下载素材。不填则用内置素材">
           <ConfigRow label="Pexels API Key">
-            <input type="password" value={config.pexels_api_key} onChange={set('pexels_api_key')}
-              placeholder="留空则跳过 Pexels 素材" className="w-full px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm" />
+            <PasswordField
+              value={config.pexels_api_key}
+              onChange={set('pexels_api_key')}
+              placeholder="留空则跳过 Pexels 素材"
+              show={showFields['pexels_api_key']}
+              onToggle={() => toggleShow('pexels_api_key')}
+            />
           </ConfigRow>
           <ConfigRow label="Pixabay API Key">
-            <input type="password" value={config.pixabay_api_key} onChange={set('pixabay_api_key')}
-              placeholder="留空则跳过 Pixabay 素材" className="w-full px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm" />
+            <PasswordField
+              value={config.pixabay_api_key}
+              onChange={set('pixabay_api_key')}
+              placeholder="留空则跳过 Pixabay 素材"
+              show={showFields['pixabay_api_key']}
+              onToggle={() => toggleShow('pixabay_api_key')}
+            />
           </ConfigRow>
           <div className="mt-2">
             <button onClick={() => saveSection('medias', { pexels_api_key: config.pexels_api_key, pixabay_api_key: config.pixabay_api_key })} disabled={saving === 'medias'}
@@ -265,6 +293,35 @@ export default function SettingsPage() {
 }
 
 // ── Helper Components ──
+
+function PasswordField({ value, onChange, placeholder, show, onToggle, button }: {
+  value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string; show?: boolean; onToggle?: () => void; button?: React.ReactNode;
+}) {
+  return (
+    <div className="flex gap-2">
+      <div className="relative flex-1">
+        <input
+          type={show ? 'text' : 'password'}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          className="w-full px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm pr-10"
+        />
+        {onToggle && (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            {show ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        )}
+      </div>
+      {button}
+    </div>
+  );
+}
 
 function ConfigCard({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
   return (
@@ -289,12 +346,13 @@ function ConfigRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-function OAuthConfigCard({ title, platform, help, clientId, clientSecret, onClientId, onClientSecret, onSave, saving, baseUrl }: {
+function OAuthConfigCard({ title, platform, help, clientId, clientSecret, onClientId, onClientSecret, onSave, saving, baseUrl, showSecret, onToggleSecret }: {
   title: string; platform: string; help: typeof OAUTH_HELP.facebook;
   clientId: string; clientSecret: string;
   onClientId: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onClientSecret: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onSave: () => void; saving: boolean; baseUrl: string;
+  showSecret?: boolean; onToggleSecret?: () => void;
 }) {
   const redirectUri = baseUrl + help.redirect;
   const copyUri = () => { navigator.clipboard.writeText(redirectUri); toast.success('已复制回调地址'); };
@@ -308,8 +366,13 @@ function OAuthConfigCard({ title, platform, help, clientId, clientSecret, onClie
           placeholder="填 Client ID（在开发者平台获取）" className="w-full px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm" />
       </ConfigRow>
       <ConfigRow label="Client Secret">
-        <input type="password" value={clientSecret} onChange={onClientSecret}
-          placeholder="填 Client Secret" className="w-full px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-sm" />
+        <PasswordField
+          value={clientSecret}
+          onChange={onClientSecret}
+          placeholder="填 Client Secret"
+          show={showSecret}
+          onToggle={onToggleSecret}
+        />
       </ConfigRow>
       <ConfigRow label="Redirect URI（注册时填入）">
         <div className="flex items-center gap-2">

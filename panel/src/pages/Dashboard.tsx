@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth, api } from '../AuthContext';
-import { LayoutDashboard, Video, FileText, Send, Globe, Users, X, Loader2, CheckCircle2, Trash2, LogOut } from 'lucide-react';
+import { LayoutDashboard, Video, FileText, Send, Globe, Users, X, Loader2, CheckCircle2, Trash2, LogOut, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface Stats {
@@ -9,6 +10,7 @@ interface Stats {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { token } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -81,6 +83,45 @@ export default function Dashboard() {
 
       {loading ? (
         <div className="text-gray-500">加载中...</div>
+      ) : !stats || stats.accounts === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-accent-primary/20 to-blue-500/20 flex items-center justify-center mb-6">
+            <Globe size={48} className="text-accent-primary opacity-60" />
+          </div>
+          <h3 className="text-2xl font-bold mb-2">欢迎使用 AIOps</h3>
+          <p className="text-gray-500 mb-6 text-center max-w-md">
+            开始之前，请先绑定您的社交媒体账号，让 AI 团队为您自动创作和发布内容。
+          </p>
+          <button
+            onClick={() => navigate('/accounts')}
+            className="flex items-center gap-2 px-6 py-3 bg-accent-primary/50 hover:bg-accent-primary/70 rounded-xl text-base font-medium transition-all hover:scale-105"
+          >
+            去绑定账号 <ArrowRight size={18} />
+          </button>
+          <div className="grid grid-cols-3 gap-6 mt-12 text-center">
+            <div>
+              <div className="w-12 h-12 mx-auto mb-2 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <FileText size={22} className="text-blue-400" />
+              </div>
+              <p className="text-sm font-medium">AI 内容生成</p>
+              <p className="text-xs text-gray-500 mt-1">自动撰写推文和文案</p>
+            </div>
+            <div>
+              <div className="w-12 h-12 mx-auto mb-2 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Video size={22} className="text-purple-400" />
+              </div>
+              <p className="text-sm font-medium">智能配图配视频</p>
+              <p className="text-xs text-gray-500 mt-1">AI 生成视觉内容</p>
+            </div>
+            <div>
+              <div className="w-12 h-12 mx-auto mb-2 rounded-lg bg-green-500/10 flex items-center justify-center">
+                <Send size={22} className="text-green-400" />
+              </div>
+              <p className="text-sm font-medium">定时自动发布</p>
+              <p className="text-xs text-gray-500 mt-1">多平台排程发布</p>
+            </div>
+          </div>
+        </div>
       ) : (
         <>
           {/* Stats Cards */}
@@ -146,15 +187,28 @@ export default function Dashboard() {
                     </div>
 
                     <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="输入推文内容（最多 280 字符）..."
-                        value={tweetTexts[acc.id] || ''}
-                        onChange={e => setTweetTexts(prev => ({ ...prev, [acc.id]: e.target.value }))}
-                        maxLength={280}
-                        className="flex-1 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-white text-sm"
-                        onKeyDown={e => e.key === 'Enter' && handleSendTweet(acc.id)}
-                      />
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          placeholder="输入推文内容（最多 280 字符）..."
+                          value={tweetTexts[acc.id] || ''}
+                          onChange={e => setTweetTexts(prev => ({ ...prev, [acc.id]: e.target.value }))}
+                          maxLength={280}
+                          className="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-white text-sm pr-16"
+                          onKeyDown={e => e.key === 'Enter' && handleSendTweet(acc.id)}
+                        />
+                        {tweetTexts[acc.id] && tweetTexts[acc.id].length > 0 && (
+                          <span
+                            className={`absolute right-2 top-1/2 -translate-y-1/2 text-xs font-mono ${
+                              tweetTexts[acc.id].length > 50 ? 'text-green-400' :
+                              tweetTexts[acc.id].length > 20 ? 'text-yellow-400' :
+                              'text-red-400'
+                            }`}
+                          >
+                            {280 - tweetTexts[acc.id].length}
+                          </span>
+                        )}
+                      </div>
                       <button
                         onClick={() => handleSendTweet(acc.id)}
                         disabled={postingId === acc.id}
@@ -170,7 +224,13 @@ export default function Dashboard() {
                     </div>
 
                     {tweetTexts[acc.id] && tweetTexts[acc.id].length > 0 && (
-                      <p className="text-xs text-gray-500 mt-1 text-right">
+                      <p
+                        className={`text-xs mt-1 text-right font-mono ${
+                          tweetTexts[acc.id].length > 50 ? 'text-green-400' :
+                          tweetTexts[acc.id].length > 20 ? 'text-yellow-400' :
+                          'text-red-400'
+                        }`}
+                      >
                         {tweetTexts[acc.id].length}/280
                       </p>
                     )}
