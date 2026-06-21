@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
-import { LayoutDashboard, Video, FileText, Send, Users, Settings, LogOut, GitBranch } from 'lucide-react';
+import { LayoutDashboard, Video, FileText, Users, Settings, LogOut } from 'lucide-react';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -11,10 +11,9 @@ export default function Layout() {
 
   const links = [
     { to: '/', icon: LayoutDashboard, label: '概览' },
-    { to: '/team-workflow', icon: Users, label: '运营团队' },
+    { to: '/teams', icon: Users, label: '运营团队' },
     { to: '/videos', icon: Video, label: '视频制作' },
     { to: '/content', icon: FileText, label: '文案生成' },
-    { to: '/publish', icon: Send, label: '发布管理' },
     { to: '/accounts', icon: Users, label: '账号管理' },
     { to: '/settings', icon: Settings, label: '系统配置' },
   ];

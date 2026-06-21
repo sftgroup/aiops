@@ -5,7 +5,6 @@ import { AuthProvider, useAuth } from './AuthContext';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import ContentPage from './pages/ContentPage';
-import PublishPage from './pages/PublishPage';
 import AccountsPage from './pages/AccountsPage';
 import SettingsPage from './pages/SettingsPage';
 import VideoPage from './pages/VideoPage';
@@ -31,7 +30,6 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="videos" element={<VideoPage />} />
             <Route path="content" element={<ContentPage />} />
-            <Route path="publish" element={<PublishPage />} />
             <Route path="accounts" element={<AccountsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="team-workflow" element={<Navigate to="/teams" replace />} />

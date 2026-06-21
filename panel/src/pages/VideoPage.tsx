@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth, api } from '../AuthContext';
 import toast from 'react-hot-toast';
 import { Loader2, Sparkles, Video, Play, Clock } from 'lucide-react';
+import PublishSection from '../components/PublishSection';
 
 interface VideoItem {
   id: string;
@@ -164,6 +165,7 @@ export default function VideoPage() {
                       <Clock size={10} /> {new Date(vid.createdAt).toLocaleString('zh-CN')}
                     </p>
                   )}
+                  <PublishSection text={vid.subject || vid.script || ''} />
                 </div>
               </div>
             ))}

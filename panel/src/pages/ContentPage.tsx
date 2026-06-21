@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth, api } from '../AuthContext';
 import toast from 'react-hot-toast';
 import { FileText, Image, Trash2, Loader2, Sparkles, Download } from 'lucide-react';
+import PublishSection from '../components/PublishSection';
 
 export default function ContentPage() {
   const { token } = useAuth();
@@ -155,6 +156,8 @@ export default function ContentPage() {
                   </a>
                 )}
               </div>
+              {/* Publish */}
+              {generatedText && <PublishSection text={generatedText} />}
             </div>
           )}
         </div>
