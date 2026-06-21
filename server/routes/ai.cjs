@@ -5,7 +5,8 @@ const path = require('path');
 const { loadDB, saveDB } = require('../db.cjs');
 const { uuid } = require('../utils/uuid.cjs');
 const { authMiddleware } = require('../middleware/auth.cjs');
-const { CONFIG, DATA_DIR, libtvGenVideo, libtvPollNode, libtvExec, ensureLibtvProject } = require('../config.cjs');
+const { CONFIG, DATA_DIR } = require('../config.cjs');
+const { genVideo } = require('../libtv-cli.cjs');
 
 module.exports = function (app) {
   // GET /api/stats — Dashboard statistics
@@ -37,7 +38,7 @@ module.exports = function (app) {
       const { subject, model, duration } = req.body;
       if (!subject) return res.status(400).json({ error: '视频主题必填' });
 
-      const result = await libtvGenVideo(subject, model || 'Happy Horse 1.0', duration);
+      const result = await genVideo(subject, 'AI', { model: model || undefined, duration });
       if (!result.url) return res.status(500).json({ error: 'LibTV 生成失败' });
 
       const contents = loadDB('contents');
