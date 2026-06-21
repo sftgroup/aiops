@@ -12,6 +12,8 @@ export default function ContentPage() {
   const [generatedText, setGeneratedText] = useState('');
   const [generatedImage, setGeneratedImage] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [progressStep, setProgressStep] = useState('');
+  const [progressBar, setProgressBar] = useState({ step: '', progress: 0, message: '' });
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -25,47 +27,90 @@ export default function ContentPage() {
   const handleGenerate = async () => {
     if (!aiPrompt) return toast.error('请输入提示词');
     setGenerating(true);
+    setProgressStep('正在调用 DeepSeek 生成文案...');
+    setProgressBar({ step: 'text', progress: 10, message: '调用 DeepSeek API...' });
     setGeneratedText('');
     setGeneratedImage('');
     try {
-      // Step 1: Generate text
+      // Step 1: Generate text via DeepSeek
       const textResult = await api(token!).post('/ai/generate', {
         prompt: aiPrompt,
         platform: 'twitter',
       });
       setGeneratedText(textResult.text);
+      setProgressBar({ step: 'text', progress: 50, message: '文案生成完成' });
 
-      // Step 2: Generate matching image
-      const imgResult = await api(token!).post('/ai/image', {
+      // Step 2: Generate matching image (async with polling)
+      setProgressStep('正在生成配图...');
+      setProgressBar({ step: 'image-start', progress: 55, message: '提交配图任务...' });
+      const taskResult = await api(token!).post('/ai/image', {
         subject: aiPrompt,
         style: 'general',
       });
-      if (imgResult?.url) setGeneratedImage(imgResult.url);
+      const taskId = taskResult.taskId;
+      if (!taskId) throw new Error('配图任务创建失败');
 
-      toast.success('文案+配图生成完成');
+      // Poll for progress
+      setProgressStep('正在生成配图，等待 LibTV...');
+      const poll = setInterval(async () => {
+        try {
+          const status = await api(token!).get('/ai/image/status/' + taskId);
+          if (status.step === 'completed') {
+            clearInterval(poll);
+            if (status.url) setGeneratedImage(status.url);
+            setProgressBar({ step: 'completed', progress: 100, message: '配图完成' });
+            setProgressStep('');
+
+            // Auto-save
+            try {
+              await api(token!).post('/contents/text', {
+                title: aiPrompt,
+                text: textResult.text,
+                imageUrl: status.url || '',
+              });
+              toast.success('已自动保存');
+              load();
+            } catch {}
+            setGenerating(false);
+            return;
+          }
+          if (status.step === 'failed' || status.error) {
+            clearInterval(poll);
+            setProgressBar({ step: 'failed', progress: 0, message: status.error || '配图生成失败' });
+            toast.error('配图生成失败，文案已显示');
+            setGenerating(false);
+            // Still auto-save text even if image failed
+            try {
+              await api(token!).post('/contents/text', {
+                title: aiPrompt,
+                text: textResult.text,
+              });
+              toast.success('文案已保存');
+              load();
+            } catch {}
+            return;
+          }
+          // Update progress bar
+          setProgressBar({ step: status.step, progress: status.progress || 0, message: status.message || '' });
+          setProgressStep(status.step === 'polling'
+            ? `配图生成中 (${status.iteration || '?'}/${status.total || 30})...`
+            : status.message || '生成中...');
+        } catch (e: any) {
+          // Ignore poll errors
+        }
+      }, 2000);
+
+      // Safety timeout
+      setTimeout(() => {
+        clearInterval(poll);
+        setGenerating(false);
+        setProgressStep('');
+      }, 180000);
+
     } catch (e: any) {
       toast.error(e.message || '生成失败');
-    } finally {
       setGenerating(false);
     }
-  };
-
-  const handleSave = async () => {
-    if (!generatedText) return toast.error('没有内容可保存');
-    setSaving(true);
-    try {
-      await api(token!).post('/contents/text', {
-        title: aiPrompt,
-        text: generatedText,
-        imageUrl: generatedImage,
-      });
-      toast.success('保存成功');
-      setAiPrompt('');
-      setGeneratedText('');
-      setGeneratedImage('');
-      load();
-    } catch (e: any) { toast.error(e.message); }
-    finally { setSaving(false); }
   };
 
   const handleDelete = async (id: string) => {
@@ -91,6 +136,7 @@ export default function ContentPage() {
             placeholder="描述你想要的内容，例如：写一条关于AI创业的Twitter帖子"
             value={aiPrompt}
             onChange={e => setAiPrompt(e.target.value)}
+            disabled={generating}
           />
 
           {/* Generate Button */}
@@ -103,12 +149,26 @@ export default function ContentPage() {
             {generating ? '生成中...' : 'AI 生成'}
           </button>
 
-          {/* Loading */}
+          {/* Progress Bar */}
           {generating && (
-            <div className="text-center py-6 text-gray-500 text-sm">
-              <Loader2 size={24} className="animate-spin mx-auto mb-2" />
-              <p>正在生成文案...</p>
-              <p className="text-xs text-gray-600 mt-1">同时也在生成配图</p>
+            <div className="space-y-2">
+              <div className="w-full h-2 bg-dark-bg rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    progressBar.progress < 50 ? 'bg-blue-500' :
+                    progressBar.progress < 90 ? 'bg-yellow-500' :
+                    'bg-green-500'
+                  }`}
+                  style={{ width: progressBar.progress + '%' }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1 text-gray-400">
+                  <Loader2 size={10} className="animate-spin" />
+                  {progressStep}
+                </span>
+                <span className="text-gray-600">{progressBar.progress}%</span>
+              </div>
             </div>
           )}
 
@@ -134,28 +194,16 @@ export default function ContentPage() {
                       className="w-full max-h-64 object-contain"
                     />
                   </div>
-                </div>
-              )}
-
-              {/* Save */}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="px-4 py-2 bg-accent-primary rounded-lg text-sm font-medium hover:bg-accent-primary/80 transition-colors disabled:opacity-50"
-                >
-                  {saving ? '保存中...' : '保存'}
-                </button>
-                {generatedImage && (
                   <a
                     href={generatedImage}
                     download
-                    className="px-4 py-2 border border-gray-600 rounded-lg text-sm text-gray-300 hover:bg-gray-800 transition-colors flex items-center gap-1"
+                    className="inline-flex items-center gap-1 mt-2 text-xs text-blue-400 hover:underline"
                   >
-                    <Download size={14} /> 下载配图
+                    <Download size={12} /> 下载配图
                   </a>
-                )}
-              </div>
+                </div>
+              )}
+
               {/* Publish */}
               {generatedText && <PublishSection text={generatedText} />}
             </div>

@@ -130,18 +130,42 @@ module.exports = function (app) {
     }
   });
 
-  // ─── AI 生成配图 ───────────────────────────────
+  // ─── AI 生成配图（异步任务 + 进度轮询） ──────────
+  const imageTasks = new Map();
+
   app.post('/api/ai/image', authMiddleware, async (req, res) => {
     try {
       const { subject, style } = req.body;
       if (!subject) return res.status(400).json({ error: '主题必填' });
 
-      const url = await genImage(subject, 'AI', { style });
-      if (!url) return res.status(500).json({ error: 'LibTV 图片生成失败' });
+      const taskId = require('crypto').randomUUID();
+      const task = {
+        step: 'starting', progress: 0, message: '初始化...',
+        url: null, error: null, createdAt: Date.now(),
+      };
+      imageTasks.set(taskId, task);
 
-      res.json({ url });
+      // 后台异步生成，不 await
+      genImage(subject, 'AI', { style }, (p) => {
+        Object.assign(task, p);
+      }).then(url => {
+        Object.assign(task, { step: url ? 'completed' : 'failed', progress: url ? 100 : 0, url });
+        // 5分钟后清理
+        setTimeout(() => imageTasks.delete(taskId), 300000);
+      }).catch(e => {
+        Object.assign(task, { step: 'failed', error: e.message });
+      });
+
+      res.json({ taskId });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
+  });
+
+  // ─── 配图生成进度查询 ───────────────────────────
+  app.get('/api/ai/image/status/:taskId', authMiddleware, (req, res) => {
+    const task = imageTasks.get(req.params.taskId);
+    if (!task) return res.status(404).json({ error: '任务不存在或已过期' });
+    res.json(task);
   });
 };
