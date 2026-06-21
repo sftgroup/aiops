@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth, api } from '../AuthContext';
 import toast from 'react-hot-toast';
 import {
-  Loader2, Sparkles, Video, Play, Clock,
+  Loader2, Sparkles, Video, Play, Clock, Timer,
   FileText, Trash2, Download, CheckCircle2
 } from 'lucide-react';
 import PublishSection from '../components/PublishSection';
@@ -26,6 +26,7 @@ export default function VideoPage() {
   const { token } = useAuth();
   const [subject, setSubject] = useState('');
   const [script, setScript] = useState('');
+  const [duration, setDuration] = useState(30);
   const [generatingScript, setGeneratingScript] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
@@ -76,7 +77,7 @@ export default function VideoPage() {
     setVideos(prev => prev.filter(v => v.videoUrl)); // keep only completed ones in gallery
     try {
       const d = await api(token!).post('/team-tasks/today/video', {
-        subject, script,
+        subject, script, duration,
       });
       toast.success('📽️ 视频已提交，实时追踪中...');
       setProgressMsg('已提交，等待队列...');
@@ -163,7 +164,7 @@ export default function VideoPage() {
             </span>
             <h3 className="font-semibold">视频主题</h3>
           </div>
-          <div className="p-5">
+          <div className="p-5 space-y-4">
             <input
               className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-xl text-white focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
               value={subject}
@@ -171,6 +172,41 @@ export default function VideoPage() {
               placeholder="例如：AI 改变生活、未来科技展望…"
               disabled={generating}
             />
+
+            {/* Duration Selector */}
+            <div>
+              <label className="flex items-center gap-1.5 text-sm text-gray-400 mb-2.5">
+                <Timer size={14} />
+                视频时长
+              </label>
+              <div className="flex items-center gap-2">
+                {[
+                  { value: 15, label: '15s', desc: '短' },
+                  { value: 30, label: '30s', desc: '推荐' },
+                  { value: 60, label: '60s', desc: '长' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setDuration(opt.value)}
+                    disabled={generating}
+                    className={`relative flex-1 px-4 py-2.5 rounded-xl text-xs font-medium border transition-all ${
+                      duration === opt.value
+                        ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 shadow-sm'
+                        : 'bg-dark-bg border-dark-border text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                    } disabled:opacity-50`}
+                  >
+                    <span className="block">{opt.label}</span>
+                    {opt.desc && (
+                      <span className={`block mt-0.5 text-[10px] ${
+                        duration === opt.value ? 'text-purple-400/60' : 'text-gray-600'
+                      }`}>
+                        {opt.desc}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 

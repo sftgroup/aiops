@@ -165,10 +165,11 @@ module.exports = function (app) {
               const libtvVideoModel2 =
                 (settings2 && settings2.libtv_video_model) ||
                 'Happy Horse 1.0';
+              const duration = parseInt(req.body.duration) || 30;
               const result = await libtvGenVideo(
                 vid.script || vid.subject || task.subject,
                 task.subject || 'AI',
-                { model: libtvVideoModel2 }
+                { model: libtvVideoModel2, duration }
               );
               const url = result.url;
               const l = loadTeamTasks();
