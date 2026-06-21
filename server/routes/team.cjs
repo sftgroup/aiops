@@ -9,14 +9,11 @@ const { authMiddleware } = require('../middleware/auth.cjs');
 const {
   CONFIG,
   DATA_DIR,
-  refreshLibtvToken,
-  hasLibtvAuth,
-  libtvExec,
-  ensureLibtvProject,
-  libtvPollNode,
-  libtvGenImage,
-  libtvGenVideo,
 } = require('../config.cjs');
+const {
+  genVideo: libtvGenVideo,
+  genImage: libtvGenImage,
+} = require('../libtv-cli.cjs');
 
 let _shouldStop = false;
 
@@ -169,8 +166,9 @@ module.exports = function (app) {
                 (settings2 && settings2.libtv_video_model) ||
                 'Happy Horse 1.0';
               const result = await libtvGenVideo(
-                vid.script || '主题：' + vid.subject,
-                libtvVideoModel2
+                vid.script || vid.subject || task.subject,
+                task.subject || 'AI',
+                { model: libtvVideoModel2 }
               );
               const url = result.url;
               const l = loadTeamTasks();
@@ -402,12 +400,10 @@ module.exports = function (app) {
         ) {
           for (let i = 0; i < articles.length; i++) {
             try {
-              const imgPrompt =
-                articles[i].imagePrompt ||
-                task.subject + ' 精美配图';
               articles[i].imageUrl = await libtvGenImage(
-                imgPrompt,
-                libtvImageModel
+                task.subject,
+                'AI',
+                { model: libtvImageModel }
               );
             } catch (e) {
               console.error(
@@ -498,9 +494,6 @@ module.exports = function (app) {
                 settings?.libtv_token
               ) {
                 try {
-                  const vidPrompt =
-                    video.script ||
-                    '主题：' + video.subject;
                   const segDur =
                     (l2[i2] &&
                       l2[i2].config &&
@@ -508,9 +501,9 @@ module.exports = function (app) {
                         .segmentDuration) ||
                     15;
                   const vResult = await libtvGenVideo(
-                    vidPrompt,
-                    libtvVideoModel,
-                    segDur
+                    video.script || video.subject || task.subject,
+                    task.subject || 'AI',
+                    { model: libtvVideoModel, duration: segDur }
                   );
                   video.videoUrl = vResult.url;
                   video.libtvNode = vResult.nodeName;

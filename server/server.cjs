@@ -57,6 +57,7 @@ require('./routes/accounts.cjs')(app);
 require('./routes/publish.cjs')(app);
 require('./routes/team.cjs')(app);
 require('./routes/settings.cjs')(app);
+require("./routes/teams.cjs")(app);
 require('./routes/oauth.cjs')(app);
 require('./routes/ai.cjs')(app);
 

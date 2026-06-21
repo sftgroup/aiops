@@ -11,7 +11,7 @@ export default function Layout() {
 
   const links = [
     { to: '/', icon: LayoutDashboard, label: '概览' },
-    { to: '/team-workflow', icon: Users, label: '虚拟团队' },
+    { to: '/team-workflow', icon: Users, label: '运营团队' },
     { to: '/videos', icon: Video, label: '视频制作' },
     { to: '/content', icon: FileText, label: '内容管理' },
     { to: '/publish', icon: Send, label: '发布管理' },
