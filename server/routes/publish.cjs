@@ -156,11 +156,11 @@ module.exports = function (app) {
   app.delete('/api/publishes/:id', authMiddleware, (req, res) => {
     const all = loadDB('publishes');
     const idx = all.findIndex(p =>
-      String(p._id) === req.params.id && p.userId === req.user.id
+      String(p.id) === req.params.id && p.userId === req.user.id
     );
     if (idx < 0) return res.status(404).json({ error: '记录不存在' });
     const removed = all.splice(idx, 1)[0];
     saveDB('publishes', all);
-    res.json({ deleted: true, id: removed._id });
+    res.json({ deleted: true, id: removed.id });
   });
 };
