@@ -65,7 +65,7 @@ export default function VideoPage() {
     if (!subject.trim()) return toast.error('请输入视频主题');
     setGeneratingScript(true);
     try {
-      const d = await api(token!).post('/videos/scripts', { subject });
+      const d = await api(token!).post('/videos/scripts', { subject, duration });
       setScript(d.script);
       toast.success('文案生成成功');
     } catch (e: any) { toast.error(e.message); }

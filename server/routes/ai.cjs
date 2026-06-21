@@ -75,7 +75,9 @@ module.exports = function (app, ctx) {
   // POST /api/videos/scripts — Generate script via DeepSeek
   app.post('/api/videos/scripts', authMiddleware, async (req, res) => {
     try {
-      const { subject, language } = req.body;
+      const { subject, language, duration } = req.body;
+      const vidDuration = parseInt(duration) || 60;
+      const timeDesc = vidDuration <= 5 ? '5秒' : vidDuration <= 10 ? '10秒' : vidDuration <= 30 ? '30秒' : `${vidDuration}秒`;
       const resp = await fetch(`${CONFIG.deepseekUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
@@ -87,7 +89,7 @@ module.exports = function (app, ctx) {
           messages: [
             {
               role: 'system',
-              content: `你是一个短视频文案专家。用${language || '中文'}为视频主题"${subject}"写一段60-90秒的短视频脚本，包含开场、内容、结尾。`,
+              content: `你是一个短视频文案专家。用${language || '中文'}为视频主题"${subject}"写一段${timeDesc}的短视频脚本，脚本必须能在${timeDesc}内完整演完，每个画面3-5秒。${vidDuration <= 5 ? '注意：只有5秒，最多1-2个画面，精炼核心信息。' : ''}`,
             },
             { role: 'user', content: `写 "${subject}" 的短视频脚本` },
           ],
