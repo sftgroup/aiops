@@ -29,6 +29,8 @@ export default function VideoPage() {
   const [script, setScript] = useState('');
   const [duration, setDuration] = useState(5);
   const [cameraMovement, setCameraMovement] = useState('');
+  const [customDuration, setCustomDuration] = useState('');
+  const [showCustomDuration, setShowCustomDuration] = useState(false);
   const [generatingScript, setGeneratingScript] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
@@ -181,31 +183,62 @@ export default function VideoPage() {
                 <Timer size={14} />
                 视频时长
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mb-2">
                 {[
-                  { value: 5, label: '5s', desc: 'Happy Horse 1.0' },
-                  { value: 10, label: '10s', desc: 'Wan 2.6 多镜头音效' },
-                  { value: 15, label: '15s', desc: 'Wan 2.6 多镜头音效' },
+                  { value: 5, label: '5s', desc: 'Happy Horse' },
+                  { value: 10, label: '10s', desc: 'Wan 2.6' },
+                  { value: 15, label: '15s', desc: 'Wan 2.6' },
                 ].map(opt => (
                   <button
                     key={opt.value}
-                    onClick={() => setDuration(opt.value)}
+                    onClick={() => { setDuration(opt.value); setShowCustomDuration(false); setCustomDuration(''); }}
                     disabled={generating}
                     className={`relative flex-1 px-4 py-2.5 rounded-xl text-xs font-medium border transition-all ${
-                      duration === opt.value
+                      duration === opt.value && !showCustomDuration
                         ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 shadow-sm'
                         : 'bg-dark-bg border-dark-border text-gray-400 hover:border-gray-600 hover:text-gray-300'
                     } disabled:opacity-50`}
                   >
                     <span className="block">{opt.label}</span>
                     <span className={`block mt-0.5 text-[10px] ${
-                      duration === opt.value ? 'text-purple-400/60' : 'text-gray-600'
+                      duration === opt.value && !showCustomDuration ? 'text-purple-400/60' : 'text-gray-600'
                     }`}>
                       {opt.desc}
                     </span>
                   </button>
                 ))}
+                {/* Custom Button */}
+                <button
+                  onClick={() => { setShowCustomDuration(true); setDuration(0); }}
+                  disabled={generating}
+                  className={`relative flex-1 px-3 py-2.5 rounded-xl text-xs font-medium border transition-all ${
+                    showCustomDuration
+                      ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 shadow-sm'
+                      : 'bg-dark-bg border-dark-border text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                  } disabled:opacity-50`}
+                >
+                  <span className="block">自定义</span>
+                </button>
               </div>
+              {showCustomDuration && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="300"
+                    value={customDuration}
+                    onChange={e => {
+                      setCustomDuration(e.target.value);
+                      const v = parseInt(e.target.value);
+                      if (v > 0 && v <= 300) setDuration(v);
+                    }}
+                    placeholder="3~300秒"
+                    disabled={generating}
+                    className="flex-1 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-white text-xs focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
+                  />
+                  <span className="text-xs text-gray-500">秒</span>
+                </div>
+              )}
             </div>
 
             {/* Camera Movement Selector */}
