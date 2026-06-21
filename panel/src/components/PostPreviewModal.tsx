@@ -96,21 +96,24 @@ export default function PostPreviewModal({ text, imageUrl, prompt, onClose, onSa
   }, {} as Record<string, any[]>);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-150"
+      onClick={onClose}
+    >
       <div
-        className="bg-dark-card border border-dark-border rounded-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col shadow-2xl"
+        className="bg-dark-card border border-dark-border rounded-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-dark-border">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-dark-border shrink-0">
           <div className="flex items-center gap-3">
             <h3 className="font-semibold text-white">📝 内容预览</h3>
-            <div className="flex bg-dark-bg rounded-lg p-0.5">
+            <div className="flex bg-dark-bg rounded-xl p-0.5 border border-dark-border">
               <button
                 onClick={() => setMode('preview')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs transition-colors ${
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   mode === 'preview'
-                    ? 'bg-accent-primary text-white'
+                    ? 'bg-accent-primary text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
@@ -118,9 +121,9 @@ export default function PostPreviewModal({ text, imageUrl, prompt, onClose, onSa
               </button>
               <button
                 onClick={() => setMode('edit')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs transition-colors ${
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   mode === 'edit'
-                    ? 'bg-accent-primary text-white'
+                    ? 'bg-accent-primary text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
@@ -248,27 +251,32 @@ export default function PostPreviewModal({ text, imageUrl, prompt, onClose, onSa
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-4 border-t border-dark-border gap-3">
+        <div className="flex items-center justify-between px-5 py-4 border-t border-dark-border gap-3 shrink-0">
           <button
             onClick={handleSaveDraft}
-            className="px-4 py-2 text-xs text-gray-400 border border-dark-border rounded-lg hover:text-white hover:border-gray-500 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-400 border border-dark-border rounded-xl hover:text-white hover:border-gray-500 transition-all hover:bg-dark-hover"
           >
-            保存草稿
+            💾 保存草稿
           </button>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-xs text-gray-400 hover:text-white transition-colors"
+              className="px-4 py-2 text-xs text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-dark-hover"
             >
-              取消
+              关闭
             </button>
+            {selectedAccounts.length > 0 && (
+              <span className="text-xs text-gray-600">
+                {selectedAccounts.length} 个账号
+              </span>
+            )}
             <button
               onClick={handlePublish}
               disabled={publishing || !editText || selectedAccounts.length === 0}
-              className="flex items-center gap-1.5 px-5 py-2 bg-accent-primary hover:bg-accent-primary/80 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-5 py-2 bg-accent-primary hover:bg-accent-primary/80 rounded-xl text-xs font-medium transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
             >
               {publishing ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-              {publishing ? '发布中...' : `发布到 ${selectedAccounts.length} 个账号`}
+              {publishing ? '发布中...' : '发布'}
             </button>
           </div>
         </div>
