@@ -134,7 +134,16 @@ module.exports = function (app, ctx) {
         }),
       });
       const data = await resp.json();
-      res.json({ text: data.choices?.[0]?.message?.content || '' });
+      // 检查 DeepSeek API 错误
+      if (data.error) {
+        console.error('[DeepSeek] API error:', data.error.message);
+        return res.status(502).json({ error: 'AI 服务异常: ' + data.error.message });
+      }
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) {
+        return res.status(502).json({ error: 'AI 返回内容为空，请重试' });
+      }
+      res.json({ text: content });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
