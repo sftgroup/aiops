@@ -68,7 +68,7 @@ function buildPrompt(subject, teamName, options = {}) {
     };
   } else {
     return {
-      prompt: `${subject}. 风格: ${styleDesc.replace(/\n/g, ' ')}, 高质量、细节丰富`,
+      prompt: `${subject}. 风格: ${styleDesc.replace(/\n/g, ' ')}, 高质量摄影级画面, 细节丰富, 光影自然, 构图专业`,
       model: '',
     };
   }

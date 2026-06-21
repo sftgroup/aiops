@@ -109,12 +109,23 @@ module.exports = function (app, ctx) {
       if (!prompt) return res.status(400).json({ error: '提示词必填' });
 
       const platformTips = {
-        twitter: '适合Twitter/X的短平快风格，280字符以内，带话题标签',
+        twitter: '适合Twitter/X的短平快风格，语言自然有力，280字符以内。第一句要足够吸引人，让用户想点开。使用1-2个相关话题标签，适当用emoji。直接输出文案，不要任何开场说明',
         youtube: '适合YouTube的详细描述风格，包含关键词优化',
         tiktok: '适合TikTok的短促有力风格，带热门话题标签',
         instagram: '适合Instagram的视觉描述+故事风格，带相关标签',
         facebook: '适合Facebook的社交互动风格，引导评论和分享',
       };
+
+      const systemContent = `你是顶尖的社交媒体内容创作专家。
+${platform ? platformTips[platform] || '' : ''}
+${style ? `风格：${style}` : ''}
+
+要求：
+- 语言自然有力，拒绝空泛套话和AI味
+- 要有具体的观点、数据或独特洞察，不要泛泛而谈
+- 第一句话必须足够抓眼球
+- 直接输出文案，不加开场白、不加引号、不加"文案："等前缀
+- 只输出一条帖子内容`;
 
       const resp = await fetch(`${CONFIG.deepseekUrl}/v1/chat/completions`, {
         method: 'POST',
@@ -125,11 +136,8 @@ module.exports = function (app, ctx) {
         body: JSON.stringify({
           model: 'deepseek-chat',
           messages: [
-            {
-              role: 'system',
-              content: `你是一个社交媒体内容创作专家。${platform ? platformTips[platform] || '' : ''}${style ? `\n风格：${style}` : ''}`,
-            },
-            { role: 'user', content: prompt },
+            { role: 'system', content: systemContent },
+            { role: 'user', content: `帮我写一条关于「${prompt}」的Twitter帖子` },
           ],
         }),
       });

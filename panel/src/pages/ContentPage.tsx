@@ -274,6 +274,68 @@ export default function ContentPage() {
     generateFlow(prompt, entry);
   };
 
+  // ─── 单独重新生成文案 ────────────────────────────
+  const handleRegenText = async () => {
+    if (!aiPrompt) return toast.error('请输入提示词');
+    setGenerating(true);
+    setProgressStep('重新生成文案...');
+    setProgressBar({ step: 'text', progress: 10, message: '调用 DeepSeek API...' });
+    try {
+      const textResult = await api(token!).post('/ai/generate', { prompt: aiPrompt, platform: 'twitter' });
+      setGeneratedText(textResult.text);
+      saveDraft(aiPrompt, textResult.text, generatedImage);
+      toast.success('文案已更新');
+    } catch (e: any) {
+      toast.error(e.message || '文案生成失败');
+    }
+    setGenerating(false);
+  };
+
+  // ─── 单独重新生成配图 ────────────────────────────
+  const handleRegenImage = async () => {
+    if (!aiPrompt) return toast.error('请输入提示词');
+    setGenerating(true);
+    setProgressStep('重新生成配图...');
+    setProgressBar({ step: 'image-start', progress: 55, message: '正在连接 LibTV...' });
+    try {
+      const taskResult = await api(token!).post('/ai/image', { subject: aiPrompt, style: 'general' });
+      const taskId = taskResult.taskId;
+      if (!taskId) throw new Error('配图任务创建失败');
+      pendingTaskId.current = taskId;
+      setProgressStep('排队中...');
+      setProgressBar({ step: 'queued', progress: 55, message: '已提交，等待队列处理...' });
+
+      // REST 轮询等配图完成
+      const poll = setInterval(async () => {
+        if (!token) { clearInterval(poll); return; }
+        try {
+          const status = await api(token).get('/ai/image/status/' + taskId);
+          if (status.step === 'completed') {
+            clearInterval(poll);
+            pendingTaskId.current = null;
+            const url = '/api/file/' + (status.url?.replace('/api/file/', '') || '');
+            if (url) setGeneratedImage(url);
+            saveDraft(aiPrompt, generatedText || '', url || '');
+            setProgressBar({ step: 'completed', progress: 100, message: '配图已完成' });
+            toast.success('配图已更新');
+            setGenerating(false);
+            return;
+          }
+          if (status.step === 'failed' || status.error) {
+            clearInterval(poll);
+            pendingTaskId.current = null;
+            toast('配图生成失败', { icon: '⚠️' });
+            setGenerating(false);
+            return;
+          }
+        } catch { /* 继续轮询 */ }
+      }, 3000);
+    } catch (e: any) {
+      toast.error(e.message || '配图生成失败');
+      setGenerating(false);
+    }
+  };
+
   const generateFlow = async (prompt: string, entry: any) => {
     try {
       const textResult = await api(token!).post('/ai/generate', { prompt, platform: 'twitter' });
@@ -428,15 +490,7 @@ export default function ContentPage() {
               {generating ? '生成中...' : 'AI 生成'}
             </button>
 
-            {generatedText && !generating && (
-              <button
-                onClick={() => setShowPreview(true)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-accent-primary/50 text-accent-primary rounded-lg text-xs hover:bg-accent-primary/10 transition-colors"
-              >
-                <Eye size={15} />
-                预览发布
-              </button>
-            )}
+
           </div>
 
           {/* Progress */}
@@ -487,10 +541,29 @@ export default function ContentPage() {
               )}
 
               {generatedText && !generating && (
-                <p className="text-xs text-gray-500 flex items-center gap-1">
-                  <Eye size={11} />
-                  点击「预览发布」查看帖子效果、编辑文案、发布到社交媒体
-                </p>
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    onClick={handleRegenText}
+                    className="text-xs px-3 py-1.5 border border-dark-border rounded-lg text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+                  >
+                    重新生成文案
+                  </button>
+                  {generatedImage && (
+                    <button
+                      onClick={handleRegenImage}
+                      className="text-xs px-3 py-1.5 border border-dark-border rounded-lg text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+                    >
+                      重新生成配图
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowPreview(true)}
+                    className="text-xs px-3 py-1.5 bg-accent-primary/20 text-accent-primary border border-accent-primary/30 rounded-lg hover:bg-accent-primary/30 transition-colors flex items-center gap-1"
+                  >
+                    <Eye size={12} />
+                    预览发布
+                  </button>
+                </div>
               )}
             </div>
           )}
