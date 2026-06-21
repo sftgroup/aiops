@@ -117,12 +117,17 @@ export default function ContentPage() {
       return;
     }
 
-    // 进度更新
-    setProgressBar({ step: progress || step, progress: progress || 0, message: message || '' });
+    // 进度更新（使用 libtv 实时进度）
+    const realProgress = msg.libtvProgress != null && msg.libtvProgress > 0
+      ? 20 + Math.round((msg.libtvProgress / 100) * 75)
+      : (progress || 0);
+    setProgressBar({ step: progress || step, progress: realProgress, message: message || '' });
     setProgressStep(
-      step === 'polling'
-        ? `配图生成中 (${iteration || '?'}/${total || 40})...`
-        : message || '生成中...'
+      step === 'polling' && msg.libtvProgress != null
+        ? `配图生成中 ${msg.libtvProgress}%`
+        : step === 'polling'
+          ? `配图生成中 (${iteration || '?'}/${total || 200})...`
+          : message || '生成中...'
     );
   }, []);
 
@@ -341,9 +346,10 @@ export default function ContentPage() {
           return;
         }
         setProgressBar({ step: status.step, progress: status.progress || 0, message: status.message || '' });
-        setProgressStep(status.step === 'polling'
-          ? `配图生成中 (${status.iteration || '?'}/${status.total || 40})...`
-          : status.message || '生成中...');
+        const realPct = status.libtvProgress != null && status.libtvProgress > 0
+          ? `配图生成中 ${status.libtvProgress}%`
+          : `配图生成中 (${status.iteration || '?'}/${status.total || 200})...`;
+        setProgressStep(status.step === 'polling' ? realPct : (status.message || '生成中...'));
       } catch (e: any) {
         const errText = String(e.message || e);
         if (errText.includes('404') || errText.includes('不存在') || errText.includes('过期')) {

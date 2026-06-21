@@ -23,9 +23,16 @@ async function libtvExec(args, timeoutSec = 300) {
       maxBuffer: 50 * 1024 * 1024,
       timeout: timeoutSec * 1000,
     }, (err, stdout, stderr) => {
+      // libtv 即使失败也会输出 JSON（例如 -r 异步生成退出码 255）
+      // 优先解析 stdout，有 JSON 就不算失败
+      if (stdout) {
+        try {
+          const parsed = JSON.parse(stdout);
+          return resolve(parsed);
+        } catch {}
+      }
       if (err) return reject(err);
-      try { resolve(JSON.parse(stdout)); }
-      catch { resolve(stdout); }
+      resolve(stdout);
     });
   });
 }
@@ -127,12 +134,8 @@ async function genVideo(subject, teamName, options = {}) {
   const createArgs = ['node', 'create', nodeName, '-t', 'video', '--prompt', refUrl ? `${prompt} 参考图: ${refUrl}` : prompt, '-s', 'model=' + model];
   if (projectUuid) createArgs.push('-p', projectUuid);
   if (duration) createArgs.push('-s', 'duration=' + duration);
-  try {
-    await libtvExec(createArgs, 15);
-  } catch (e) {
-    console.error('[libtv] Video node create failed:', e.message);
-    return { url: '', nodeName: '', model };
-  }
+  createArgs.push('-r');
+  await libtvExec(createArgs, 15).catch(() => null);
   let lastProgress = '';
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 5000));
@@ -178,25 +181,38 @@ async function genImage(subject, teamName, options = {}, onProgress) {
   const nodeName = 'img_' + Date.now().toString(36);
   const createArgs = ['node', 'create', nodeName, '-t', 'image', '--prompt', refUrl ? `${prompt} 参考图: ${refUrl}` : prompt, '-s', 'model=' + model];
   if (projectUuid) createArgs.push('-p', projectUuid);
-  try {
-    await libtvExec(createArgs, 30);
-  } catch (e) {
-    if (onProgress) onProgress({ step: 'create-failed', progress: 0, message: `节点创建失败: ${e.message}` });
-    console.error('[libtv] Image node create failed:', e.message);
-    return '';
-  }
+  createArgs.push('-r');
+  await libtvExec(createArgs, 30).catch(() => null);
   if (onProgress) onProgress({ step: 'created', progress: 20, message: '节点已创建，等待生成...' });
-  const MAX_ROUNDS = 40;
+  const MAX_ROUNDS = 200; // 10 分钟 (200 × 3s)
   for (let i = 0; i < MAX_ROUNDS; i++) {
     await new Promise(r => setTimeout(r, 3000));
-    if (onProgress) onProgress({ step: 'polling', progress: 20 + Math.round((i / MAX_ROUNDS) * 72), message: `检测第 ${i + 1}/${MAX_ROUNDS} 轮...`, iteration: i + 1, total: MAX_ROUNDS });
     try {
       const getArgs = ['node', nodeName];
       if (projectUuid) getArgs.push('-p', projectUuid);
       const nodeData = await libtvExec(getArgs, 5);
+      
+      // 读取 libtv 真实进度
+      const taskInfo = nodeData?.data?.taskInfo;
+      const libtvProgress = taskInfo?.progressPercent || 0;
+      const isLoaded = !taskInfo?.loading;
+      
+      if (onProgress) {
+        const mappedProgress = 20 + Math.round((libtvProgress / 100) * 75);
+        onProgress({
+          step: 'polling',
+          progress: Math.min(mappedProgress, 95),
+          message: isLoaded ? '处理中...' : `生成中 ${libtvProgress}%`,
+          iteration: i + 1,
+          total: MAX_ROUNDS,
+          libtvProgress,
+        });
+      }
+
+      // 检查 URL
       const url = nodeData?.data?.url?.[0];
       if (url) {
-        if (onProgress) onProgress({ step: 'downloading', progress: 92, message: '下载中...' });
+        if (onProgress) onProgress({ step: 'downloading', progress: 95, message: '下载中...' });
         const resp = await fetch(url);
         const buf = Buffer.from(await resp.arrayBuffer());
         const name = 'libtv_' + Date.now().toString(36) + '.jpg';
@@ -204,7 +220,12 @@ async function genImage(subject, teamName, options = {}, onProgress) {
         if (onProgress) onProgress({ step: 'completed', progress: 100, message: '完成' });
         return '/api/file/' + name;
       }
-    } catch {}
+      
+      // 如果加载完成但没 URL，可能是失败了
+      if (isLoaded && !url) break;
+    } catch (e) {
+      console.error('[libtv] Poll error:', e.message);
+    }
   }
   if (onProgress) onProgress({ step: 'timeout', progress: 0, message: '生成超时' });
   return '';
