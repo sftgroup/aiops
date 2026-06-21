@@ -312,7 +312,7 @@ function EditTeamModal({
           <label className="block text-sm text-gray-400 mb-1.5 font-medium">内容类型</label>
           <div className="flex gap-3">
             <button
-              onClick={() => setContentTypes(prev => prev.includes('text_image') ? prev : [...prev, 'text_image'])}
+              onClick={() => setContentTypes(prev => prev.includes('text_image') ? prev.filter(t => t !== 'text_image') : [...prev, 'text_image'])}
               className={`px-4 py-2 rounded-lg border text-sm transition-colors ${
                 contentTypes.includes('text_image')
                   ? 'bg-purple-900/40 border-purple-600 text-purple-300'
@@ -322,7 +322,7 @@ function EditTeamModal({
               📝 文案+图片
             </button>
             <button
-              onClick={() => setContentTypes(prev => prev.includes('video') ? prev : [...prev, 'video'])}
+              onClick={() => setContentTypes(prev => prev.includes('video') ? prev.filter(t => t !== 'video') : [...prev, 'video'])}
               className={`px-4 py-2 rounded-lg border text-sm transition-colors ${
                 contentTypes.includes('video')
                   ? 'bg-purple-900/40 border-purple-600 text-purple-300'
