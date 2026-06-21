@@ -12,6 +12,7 @@ interface VideoItem {
   subject: string;
   script: string;
   videoUrl: string;
+  duration: number;
   createdAt: string;
 }
 
@@ -181,9 +182,9 @@ export default function VideoPage() {
               </label>
               <div className="flex items-center gap-2">
                 {[
-                  { value: 15, label: '15s', desc: '短' },
-                  { value: 30, label: '30s', desc: '推荐' },
-                  { value: 60, label: '60s', desc: '长' },
+                  { value: 5, label: '5s', desc: 'Happy Horse 1.0', model: 'Happy Horse 1.0' },
+                  { value: 10, label: '10s', desc: 'Seedance1.5 Pro', model: 'Seedance1.5 Pro' },
+                  { value: 15, label: '15s', desc: 'Wan 2.6', model: 'Wan 2.6' },
                 ].map(opt => (
                   <button
                     key={opt.value}
@@ -196,13 +197,11 @@ export default function VideoPage() {
                     } disabled:opacity-50`}
                   >
                     <span className="block">{opt.label}</span>
-                    {opt.desc && (
-                      <span className={`block mt-0.5 text-[10px] ${
-                        duration === opt.value ? 'text-purple-400/60' : 'text-gray-600'
-                      }`}>
-                        {opt.desc}
-                      </span>
-                    )}
+                    <span className={`block mt-0.5 text-[10px] ${
+                      duration === opt.value ? 'text-purple-400/60' : 'text-gray-600'
+                    }`}>
+                      {opt.desc}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -362,10 +361,14 @@ export default function VideoPage() {
                   )}
 
                   <div className="flex items-center justify-between mt-3">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {vid.duration && (
+                        <span className="text-[10px] text-gray-500 flex items-center gap-1 bg-dark-bg px-1.5 py-0.5 rounded">
+                          <Clock size={9} /> {vid.duration}s
+                        </span>
+                      )}
                       {vid.createdAt && (
                         <span className="text-[10px] text-gray-600 flex items-center gap-1">
-                          <Clock size={10} />
                           {new Date(vid.createdAt).toLocaleDateString('zh-CN', {
                             month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
                           })}

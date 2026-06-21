@@ -142,11 +142,13 @@ module.exports = function (app) {
           list.push(task);
           saveTeamTasks(list);
         }
+        const duration = parseInt(req.body.duration) || 5;
         const vid = {
           id: 'vid_' + Date.now().toString(36),
           subject: req.body.subject || task.subject,
           script: req.body.script || '',
           videoUrl: '',
+          duration,
           platformVariants: {},
           review: { status: 'pending', reason: '' },
           publishedTo: [],
@@ -165,11 +167,10 @@ module.exports = function (app) {
               const libtvVideoModel2 =
                 (settings2 && settings2.libtv_video_model) ||
                 'Happy Horse 1.0';
-              const duration = parseInt(req.body.duration) || 30;
               const result = await libtvGenVideo(
                 vid.script || vid.subject || task.subject,
                 task.subject || 'AI',
-                { model: libtvVideoModel2, duration }
+                { model: libtvVideoModel2, duration: vid.duration }
               );
               const url = result.url;
               const l = loadTeamTasks();

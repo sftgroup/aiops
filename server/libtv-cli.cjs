@@ -63,7 +63,7 @@ function buildPrompt(subject, teamName, options = {}) {
   const styleDesc = STYLE_MAP[style || detected] || STYLE_MAP.general;
   if (contentType === 'video') {
     return {
-      prompt: `${subject} — ${teamName} 内容. 风格: ${styleDesc.replace(/\n/g, ' ')}, 时长: ${duration}秒. 画面要求: 清晰、信息密度高、适合资讯展示`,
+      prompt: `${subject} — ${teamName} 内容. 风格: ${styleDesc.replace(/\n/g, ' ')}, 视频长度必须严格为${duration}秒, 输出完整且不中断的画面, 画面要求: 清晰、信息密度高、适合资讯展示`,
       model: '',
     };
   } else {
@@ -84,6 +84,7 @@ async function selectBestModel(contentType = 'video', vip = false) {
     if (!candidates.length) candidates = matches;
     // image: 优先选名称含 Turbo/Speed/Fast 的模型
     // video: 优先选名称含 Fast 的模型
+    // 视频时长>5s时尽可能选支持长视频的模型
     const speedKeywords = contentType === 'image' ? ['turbo', 'fast', 'speed'] : ['fast'];
     candidates.sort((a, b) => {
       if (a.vip !== b.vip) return a.vip ? 1 : -1;
@@ -123,7 +124,18 @@ async function getProjectUuid() {
 async function genVideo(subject, teamName, options = {}) {
   const { model: userModel, duration = 30, style, referenceImage } = options;
   const { prompt } = buildPrompt(subject, teamName, { contentType: 'video', style, duration });
-  const model = userModel || await selectBestModel('video');
+  // 根据时长选择合适模型
+  let model = userModel;
+  if (!model) {
+    // 支持长视频的非VIP模型：Wan 2.6（最长15s）, Seedance1.5 Pro（最长12s）
+    // Wan 2.6（最长15秒）、Seedance1.5 Pro（最长12秒）都是非VIP
+    if (duration > 5) {
+      // 注意：-s model= 用 modelName，不是 modelKey
+      model = duration <= 12 ? 'Seedance1.5 Pro' : 'Wan 2.6';
+    } else {
+      model = await selectBestModel('video');
+    }
+  }
   console.log(`[libtv] Generating video: "${subject.slice(0, 40)}" using ${model}`);
   const projectUuid = await getProjectUuid();
   let refUrl = '';
