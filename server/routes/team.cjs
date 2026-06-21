@@ -160,8 +160,8 @@ module.exports = function (app) {
         // Generate video in background
         (async () => {
           try {
-            refreshLibtvToken();
-            if (hasLibtvAuth()) {
+            // libtv-cli.cjs handles auth internally
+            {
               let settings2 = loadDB('settings');
               if (Array.isArray(settings2)) settings2 = {};
               const libtvVideoModel2 =
