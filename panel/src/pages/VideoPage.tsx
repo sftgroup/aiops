@@ -182,9 +182,9 @@ export default function VideoPage() {
               </label>
               <div className="flex items-center gap-2">
                 {[
-                  { value: 5, label: '5s', desc: 'Happy Horse 1.0', model: 'Happy Horse 1.0' },
-                  { value: 10, label: '10s', desc: 'Seedance1.5 Pro', model: 'Seedance1.5 Pro' },
-                  { value: 15, label: '15s', desc: 'Wan 2.6', model: 'Wan 2.6' },
+                  { value: 5, label: '5s', desc: 'Happy Horse 1.0' },
+                  { value: 10, label: '10s', desc: 'Wan 2.6 多镜头音效' },
+                  { value: 15, label: '15s', desc: 'Wan 2.6 多镜头音效' },
                 ].map(opt => (
                   <button
                     key={opt.value}
