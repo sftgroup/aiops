@@ -72,14 +72,44 @@ export default function ContentPage() {
     if (saved) {
       try {
         const task = JSON.parse(saved);
-        if (Date.now() - task.startedAt < 300000) { // 5 min timeout
-          setAiPrompt(task.prompt);
-          setGeneratedText(task.generatedText);
+        if (Date.now() - task.startedAt > 300000) {
+          localStorage.removeItem(LS_KEY);
+          return;
+        }
+        // 至少有 prompt 就恢复
+        if (task.prompt) setAiPrompt(task.prompt);
+        if (task.text) setGeneratedText(task.text);
+
+        if (task.step === 'image' && task.taskId) {
+          // 配图轮询中 → 恢复轮询
           setGenerating(true);
           setProgressStep('恢复生成中...');
-          startPolling(task.taskId, task.generatedText, task.prompt);
-        } else {
-          localStorage.removeItem(LS_KEY);
+          startPolling(task.taskId, task.text, task.prompt);
+        } else if (task.text) {
+          // 文案已生成，配图未提交 → 重新提交配图任务
+          setGenerating(true);
+          setProgressStep('恢复生成：提交配图任务...');
+          setProgressBar({ step: 'image-start', progress: 55, message: '重新连接 LibTV...' });
+          setTimeout(() => {
+            api(token).post('/ai/image', { subject: task.prompt, style: 'general' })
+              .then((r: any) => {
+                if (r.taskId) {
+                  task.step = 'image';
+                  task.taskId = r.taskId;
+                  localStorage.setItem(LS_KEY, JSON.stringify(task));
+                  startPolling(r.taskId, task.text, task.prompt);
+                }
+              }).catch(() => {
+                setGenerating(false);
+                localStorage.removeItem(LS_KEY);
+              });
+          }, 100);
+        } else if (task.step === 'text') {
+          // 只点了生成但还没等回来，重新触发完整流程
+          setGenerating(true);
+          setProgressStep('恢复生成中...');
+          setProgressBar({ step: 'text', progress: 10, message: '重新生成...' });
+          setTimeout(() => generateFlow(task.prompt, task), 100);
         }
       } catch {
         localStorage.removeItem(LS_KEY);
@@ -104,20 +134,31 @@ export default function ContentPage() {
 
   const handleGenerate = async () => {
     if (!aiPrompt) return toast.error('请输入提示词');
+    const prompt = aiPrompt;
+
+    // 立即写入 localStorage，不管 API 调不调得完
+    const entry = { step: 'text', prompt, text: '', taskId: '', startedAt: Date.now() };
+    localStorage.setItem(LS_KEY, JSON.stringify(entry));
+
     setGenerating(true);
     setProgressStep('正在调用 DeepSeek 生成文案...');
     setProgressBar({ step: 'text', progress: 10, message: '调用 DeepSeek API...' });
     setGeneratedText('');
     setGeneratedImage('');
-    generateFlow(aiPrompt);
+    generateFlow(prompt, entry);
   };
 
-  const generateFlow = async (prompt: string) => {
+  const generateFlow = async (prompt: string, entry: any) => {
     try {
       // Step 1: Generate text via DeepSeek
       const textResult = await api(token!).post('/ai/generate', { prompt, platform: 'twitter' });
       setGeneratedText(textResult.text);
       setProgressBar({ step: 'text', progress: 50, message: '文案生成完成' });
+
+      // 更新 localStorage（文案已就绪）
+      entry.text = textResult.text;
+      entry.step = 'text-done';
+      localStorage.setItem(LS_KEY, JSON.stringify(entry));
 
       // Step 2: Submit image generation task
       setProgressStep('提交配图任务...');
@@ -126,10 +167,10 @@ export default function ContentPage() {
       const taskId = taskResult.taskId;
       if (!taskId) throw new Error('配图任务创建失败');
 
-      // Save to localStorage so it survives tab switches
-      localStorage.setItem(LS_KEY, JSON.stringify({
-        taskId, prompt, generatedText: textResult.text, startedAt: Date.now(),
-      }));
+      // 更新 localStorage（含 taskId，切回来可轮询）
+      entry.step = 'image';
+      entry.taskId = taskId;
+      localStorage.setItem(LS_KEY, JSON.stringify(entry));
 
       // Start polling
       startPolling(taskId, textResult.text, prompt);
