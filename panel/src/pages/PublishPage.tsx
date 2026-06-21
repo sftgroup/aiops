@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth, api } from '../AuthContext';
 import toast from 'react-hot-toast';
-import { Send, CheckCircle2, Globe, X, Loader2, Users, ExternalLink, FileText } from 'lucide-react';
+import { Send, CheckCircle2, Globe, X, Loader2, Users, ExternalLink, FileText, Trash2 } from 'lucide-react';
 
 export default function PublishPage() {
   const { token } = useAuth();
@@ -13,6 +13,17 @@ export default function PublishPage() {
   const [customText, setCustomText] = useState('');
   const [publishing, setPublishing] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('确定删除这条发布记录？')) return;
+    try {
+      await api(token!).del('/publishes/' + encodeURIComponent(id));
+      toast.success('已删除');
+      load();
+    } catch (e: any) {
+      toast.error('删除失败: ' + (e.message || ''));
+    }
+  };
 
   const load = async () => {
     if (!token) return;
@@ -215,6 +226,13 @@ export default function PublishPage() {
                   {p.result?.error ? ` · ❌ ${p.result.error}` : ''}
                 </p>
               </div>
+              <button
+                onClick={() => handleDelete(p.id)}
+                className="text-gray-600 hover:text-red-400 transition-colors shrink-0 p-1"
+                title="删除"
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
           ))}
           {publishes.length > 20 && (
