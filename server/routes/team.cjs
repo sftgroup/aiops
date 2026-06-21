@@ -170,7 +170,7 @@ module.exports = function (app) {
               const result = await libtvGenVideo(
                 vid.script || vid.subject || task.subject,
                 task.subject || 'AI',
-                { model: libtvVideoModel2, duration: vid.duration }
+                { model: libtvVideoModel2, duration: vid.duration, cameraMovement: req.body.cameraMovement }
               );
               const url = result.url;
               const l = loadTeamTasks();

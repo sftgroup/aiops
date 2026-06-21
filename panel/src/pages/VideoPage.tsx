@@ -28,6 +28,7 @@ export default function VideoPage() {
   const [subject, setSubject] = useState('');
   const [script, setScript] = useState('');
   const [duration, setDuration] = useState(5);
+  const [cameraMovement, setCameraMovement] = useState('');
   const [generatingScript, setGeneratingScript] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
@@ -78,7 +79,7 @@ export default function VideoPage() {
     setVideos(prev => prev.filter(v => v.videoUrl)); // keep only completed ones in gallery
     try {
       const d = await api(token!).post('/team-tasks/today/video', {
-        subject, script, duration,
+        subject, script, duration, cameraMovement: cameraMovement || undefined,
       });
       toast.success('📽️ 视频已提交，实时追踪中...');
       setProgressMsg('已提交，等待队列...');
@@ -202,6 +203,46 @@ export default function VideoPage() {
                     }`}>
                       {opt.desc}
                     </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Camera Movement Selector */}
+            <div>
+              <label className="flex items-center gap-1.5 text-sm text-gray-400 mb-2.5">
+                <span>🎥</span>
+                镜头运动
+              </label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { value: '', label: '默认', desc: 'Happy Horse' },
+                  { value: 'auto', label: '✨ 自动多镜头', desc: 'Wan 2.6' },
+                  { value: '拉近', label: '拉近', desc: 'Hailuo' },
+                  { value: '拉远', label: '拉远', desc: 'Hailuo' },
+                  { value: '左摇', label: '左摇', desc: 'Hailuo' },
+                  { value: '右摇', label: '右摇', desc: 'Hailuo' },
+                  { value: '仰摄', label: '仰摄', desc: 'Hailuo' },
+                  { value: '俯摄', label: '俯摄', desc: 'Hailuo' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setCameraMovement(opt.value)}
+                    disabled={generating}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                      cameraMovement === opt.value
+                        ? 'bg-blue-500/20 border-blue-500/50 text-blue-300'
+                        : 'bg-dark-bg border-dark-border text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                    } disabled:opacity-50`}
+                  >
+                    {opt.label}
+                    {opt.desc && (
+                      <span className={`ml-1 text-[9px] ${
+                        cameraMovement === opt.value ? 'text-blue-400/50' : 'text-gray-600'
+                      }`}>
+                        {opt.desc}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>

@@ -123,14 +123,24 @@ async function getProjectUuid() {
 // ─── 生成视频（升级版） ────────────────────────────────
 // ─── 生成视频 ──────────────────────────────────────
 async function genVideo(subject, teamName, options = {}) {
-  const { model: userModel, duration = 5, style, referenceImage } = options;
+  const { model: userModel, duration = 5, style, referenceImage, cameraMovement } = options;
   const { prompt } = buildPrompt(subject, teamName, { contentType: 'video', style, duration });
-  // 模型选择：
-  //   Happy Horse 1.0 支持 3-15s，快速稳定
-  //   Wan 2.6 支持 5s/10s，有多镜头(多角度自动切换)+音效+1080P
+  // 根据镜头控制模式选择模型和参数
+  let model, extraParams = [];
   const segDuration = Math.min(Math.max(duration || 5, 3), 15);
-  const model = userModel || (segDuration > 5 ? 'Wan 2.6' : 'Happy Horse 1.0');
-  console.log(`[libtv] Generating video: "${subject.slice(0, 40)}" using ${model}, ${segDuration}s`);
+  if (cameraMovement === 'auto') {
+    // 自动多镜头 → Wan 2.6（多机位自动切换 + 音效 + 1080P）
+    model = 'Wan 2.6';
+    extraParams = ['-s', 'multiClip=1', '-s', 'enableSound=on', '-s', 'resolution=1080P'];
+  } else if (cameraMovement && ['拉近','拉远','左摇','右摇','仰摄','俯摄'].includes(cameraMovement)) {
+    // 手动镜头运动 → Hailuo 2.3 Fast（更快速，支持 cameraMovement）
+    model = 'Hailuo 2.3 Fast';
+    extraParams = ['-s', 'resolution=1080P', '-s', 'cameraMovement=' + cameraMovement];
+  } else {
+    // 默认：Happy Horse 1.0（快速稳定）
+    model = userModel || 'Happy Horse 1.0';
+  }
+  console.log(`[libtv] Generating video: "${subject.slice(0, 40)}" using ${model}, ${segDuration}s${cameraMovement ? ' camera=' + cameraMovement : ''}`);
   const projectUuid = await getProjectUuid();
   let refUrl = '';
   if (referenceImage && fs.existsSync(referenceImage)) {
@@ -143,11 +153,8 @@ async function genVideo(subject, teamName, options = {}) {
   const createArgs = ['node', 'create', nodeName, '-t', 'video', '--prompt', refUrl ? `${prompt} 参考图: ${refUrl}` : prompt, '-s', 'model=' + model];
   if (projectUuid) createArgs.push('-p', projectUuid);
   if (segDuration) createArgs.push('-s', 'duration=' + segDuration);
-  // Wan 2.6 特有功能：多镜头 + 音效 + 高分辨率
-  if (model === 'Wan 2.6') {
-    createArgs.push('-s', 'multiClip=1', '-s', 'enableSound=on');
-    createArgs.push('-s', 'resolution=1080P');
-  }
+  // 追加模型特有参数
+  createArgs.push(...extraParams);
   createArgs.push('-r');
   await libtvExec(createArgs, 15).catch(() => null);
   let lastProgress = '';
