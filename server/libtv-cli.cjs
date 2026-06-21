@@ -92,15 +92,35 @@ async function selectBestModel(contentType = 'video', vip = false) {
   }
 }
 
+// ─── 创建/获取今日项目 UUID ──────────────────────────
+async function getProjectUuid() {
+  const today = new Date().toISOString().slice(0, 10);
+  const projectName = 'aiops-' + today;
+  try {
+    // Try creating first (fails if exists, but we get the UUID back via create response)
+    const result = await libtvExec(['project', 'create', projectName], 10);
+    return result?.projectMeta?.uuid || '';
+  } catch {}
+  // If create failed, list projects and find existing one
+  try {
+    const listResult = await libtvExec(['project', 'list'], 10);
+    const matches = (listResult?.projectMetaList || []).filter(p => p.name === projectName);
+    if (matches.length > 0) return matches[0].uuid;
+  } catch {}
+  // Fallback: create again without catch to surface error
+  try {
+    const result = await libtvExec(['project', 'create', projectName], 10);
+    return result?.projectMeta?.uuid || '';
+  } catch { return ''; }
+}
+
 // ─── 生成视频（升级版） ────────────────────────────────
 async function genVideo(subject, teamName, options = {}) {
   const { model: userModel, duration = 30, style, referenceImage } = options;
   const { prompt } = buildPrompt(subject, teamName, { contentType: 'video', style, duration });
   const model = userModel || await selectBestModel('video');
   console.log(`[libtv] Generating video: "${subject.slice(0, 40)}" using ${model}`);
-  const today = new Date().toISOString().slice(0, 10);
-  try { await libtvExec(['project', 'create', 'aiops-' + today], 10); } catch {}
-  try { await libtvExec(['project', 'use', 'aiops-' + today], 10); } catch {}
+  const projectUuid = await getProjectUuid();
   let refUrl = '';
   if (referenceImage && fs.existsSync(referenceImage)) {
     try {
@@ -110,14 +130,17 @@ async function genVideo(subject, teamName, options = {}) {
   }
   const nodeName = 'vid_' + Date.now().toString(36);
   const params = ['node', 'create', nodeName, '-t', 'video', '--prompt', refUrl ? `${prompt} 参考图: ${refUrl}` : prompt, '-s', 'model=' + model];
+  if (projectUuid) params.push('-p', projectUuid);
   if (duration) params.push('-s', 'duration=' + duration);
   params.push('-r');
   await libtvExec(params, 10).catch(() => null);
   let lastProgress = '';
-  for (let i = 0; i < 60; i++) {
-    await new Promise(r => setTimeout(r, 10000));
+  for (let i = 0; i < 20; i++) {
+    await new Promise(r => setTimeout(r, 5000));
     try {
-      const nodeData = await libtvExec(['node', nodeName], 10);
+      const getArgs = ['node', nodeName];
+      if (projectUuid) getArgs.push('-p', projectUuid);
+      const nodeData = await libtvExec(getArgs, 10);
       const url = nodeData?.data?.url?.[0];
       if (url) {
         const vidResp = await fetch(url);
@@ -144,9 +167,7 @@ async function genImage(subject, teamName, options = {}, onProgress) {
   const model = userModel || await selectBestModel('image');
   if (onProgress) onProgress({ step: 'model', progress: 5, message: `已选模型: ${model}` });
   console.log(`[libtv] Generating image: "${subject.slice(0, 40)}" using ${model}`);
-  const today = new Date().toISOString().slice(0, 10);
-  try { await libtvExec(['project', 'create', 'aiops-' + today], 10); } catch {}
-  try { await libtvExec(['project', 'use', 'aiops-' + today], 10); } catch {}
+  const projectUuid = await getProjectUuid();
   if (onProgress) onProgress({ step: 'project', progress: 10, message: '项目就绪' });
   let refUrl = '';
   if (referenceImage && fs.existsSync(referenceImage)) {
@@ -156,13 +177,17 @@ async function genImage(subject, teamName, options = {}, onProgress) {
     } catch {}
   }
   const nodeName = 'img_' + Date.now().toString(36);
-  await libtvExec(['node', 'create', nodeName, '-t', 'image', '--prompt', refUrl ? `${prompt} 参考图: ${refUrl}` : prompt, '-s', 'model=' + model, '-r'], 10).catch(() => null);
+  const createArgs = ['node', 'create', nodeName, '-t', 'image', '--prompt', refUrl ? `${prompt} 参考图: ${refUrl}` : prompt, '-s', 'model=' + model, '-r'];
+  if (projectUuid) createArgs.push('-p', projectUuid);
+  await libtvExec(createArgs, 10).catch(() => null);
   if (onProgress) onProgress({ step: 'created', progress: 20, message: '节点已创建，等待生成...' });
-  for (let i = 0; i < 30; i++) {
-    await new Promise(r => setTimeout(r, 5000));
-    if (onProgress) onProgress({ step: 'polling', progress: 20 + Math.round((i / 30) * 70), message: `检测第 ${i + 1}/${30} 轮...`, iteration: i + 1, total: 30 });
+  for (let i = 0; i < 20; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    if (onProgress) onProgress({ step: 'polling', progress: 20 + Math.round((i / 20) * 72), message: `检测第 ${i + 1}/${20} 轮...`, iteration: i + 1, total: 20 });
     try {
-      const nodeData = await libtvExec(['node', nodeName], 10);
+      const getArgs = ['node', nodeName];
+      if (projectUuid) getArgs.push('-p', projectUuid);
+      const nodeData = await libtvExec(getArgs, 5);
       const url = nodeData?.data?.url?.[0];
       if (url) {
         if (onProgress) onProgress({ step: 'downloading', progress: 92, message: '下载中...' });
