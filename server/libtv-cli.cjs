@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const { DATA_DIR } = require('./config.cjs');
 const LIBTV_PATH = '/home/ubuntu/.libtv/libtv';
 
 // ─── CLI 执行 ─────────────────────────────────────────
@@ -79,18 +79,21 @@ async function selectBestModel(contentType = 'video', vip = false) {
   try {
     const result = await libtvExec(['model', 'search', '-t', contentType], 10);
     const matches = result?.matches || [];
-    if (!matches.length) return contentType === 'video' ? 'Happy Horse 1.0' : 'Lib Image';
+    if (!matches.length) return contentType === 'video' ? 'Happy Horse 1.0' : 'Z-image Turbo';
     let candidates = vip ? matches : matches.filter(m => !m.vip);
     if (!candidates.length) candidates = matches;
+    // image: 优先选名称含 Turbo/Speed/Fast 的模型
+    // video: 优先选名称含 Fast 的模型
+    const speedKeywords = contentType === 'image' ? ['turbo', 'fast', 'speed'] : ['fast'];
     candidates.sort((a, b) => {
       if (a.vip !== b.vip) return a.vip ? 1 : -1;
-      const aFast = a.modelName?.includes('Fast') ? 1 : 0;
-      const bFast = b.modelName?.includes('Fast') ? 1 : 0;
-      return bFast - aFast;
+      const aFast = speedKeywords.some(k => a.modelName?.toLowerCase().includes(k)) ? 1 : 0;
+      const bFast = speedKeywords.some(k => b.modelName?.toLowerCase().includes(k)) ? 1 : 0;
+      return bFast - aFast || (a.modelName || '').localeCompare(b.modelName || '');
     });
     return candidates[0].modelName;
   } catch {
-    return contentType === 'video' ? 'Happy Horse 1.0' : 'Lib Image';
+    return contentType === 'video' ? 'Happy Horse 1.0' : 'Z-image Turbo';
   }
 }
 
