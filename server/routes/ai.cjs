@@ -5,7 +5,7 @@ const path = require('path');
 const { loadDB, saveDB } = require('../db.cjs');
 const { uuid } = require('../utils/uuid.cjs');
 const { authMiddleware } = require('../middleware/auth.cjs');
-const { CONFIG, DATA_DIR } = require('../config.cjs');
+const { CONFIG, DATA_DIR, libtvGenVideo, libtvPollNode, libtvExec, ensureLibtvProject } = require('../config.cjs');
 
 module.exports = function (app) {
   // GET /api/stats — Dashboard statistics
@@ -31,77 +31,35 @@ module.exports = function (app) {
     });
   });
 
-  // POST /api/videos/generate — Submit video generation task
+  // POST /api/videos/generate — Generate video via LibTV
   app.post('/api/videos/generate', authMiddleware, async (req, res) => {
     try {
-      const { subject, script, aspect, voice, count } = req.body;
+      const { subject, model, duration } = req.body;
       if (!subject) return res.status(400).json({ error: '视频主题必填' });
 
-      const resp = await fetch(`${CONFIG.mpturboApi}/videos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          video_subject: subject,
-          video_script: script || '',
-          video_aspect: aspect || '9:16',
-          voice_name: voice || 'zh-CN-XiaoxiaoNeural-Female',
-          video_count: count || 1,
-          subtitle_enabled: true,
-          video_source: 'pixabay',
-        }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) return res.status(resp.status).json(data);
+      const result = await libtvGenVideo(subject, model || 'Happy Horse 1.0', duration);
+      if (!result.url) return res.status(500).json({ error: 'LibTV 生成失败' });
 
       const contents = loadDB('contents');
-      const content = {
+      const entry = {
         id: uuid(),
         userId: req.user.id,
         type: 'video',
         subject,
-        taskId: data.data?.task_id,
-        status: 'processing',
+        status: 'completed',
         createdAt: Date.now(),
-        urls: [],
+        urls: [result.url],
       };
-      contents.push(content);
+      contents.push(entry);
       saveDB('contents', contents);
 
-      res.json(content);
+      res.json(entry);
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
   });
 
-  // GET /api/videos/tasks/:taskId — Check task status
-  app.get('/api/videos/tasks/:taskId', authMiddleware, async (req, res) => {
-    try {
-      const resp = await fetch(
-        `${CONFIG.mpturboApi}/tasks/${req.params.taskId}`
-      );
-      const data = await resp.json();
-      if (!resp.ok) return res.status(resp.status).json(data);
 
-      const contents = loadDB('contents');
-      const content = contents.find(
-        (c) => c.taskId === req.params.taskId
-      );
-      if (content && data.data) {
-        content.status =
-          data.data.state === 2
-            ? 'completed'
-            : data.data.state === 3
-              ? 'failed'
-              : 'processing';
-        content.progress = data.data.progress;
-        if (data.data.videos) content.urls = data.data.videos;
-        saveDB('contents', contents);
-      }
-      res.json(data);
-    } catch (e) {
-      res.status(500).json({ error: e.message });
-    }
-  });
 
   // POST /api/videos/scripts — Generate script via DeepSeek
   app.post('/api/videos/scripts', authMiddleware, async (req, res) => {
@@ -131,25 +89,7 @@ module.exports = function (app) {
     }
   });
 
-  // POST /api/social/metadata — Generate social metadata
-  app.post('/api/social/metadata', authMiddleware, async (req, res) => {
-    try {
-      const { subject, script, platform } = req.body;
-      const resp = await fetch(`${CONFIG.mpturboApi}/social-metadata`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          video_subject: subject,
-          video_script: script,
-          platform: platform || 'twitter',
-        }),
-      });
-      const data = await resp.json();
-      res.json(data);
-    } catch (e) {
-      res.status(500).json({ error: e.message });
-    }
-  });
+
 
   // POST /api/ai/generate — AI text generation via DeepSeek
   app.post('/api/ai/generate', authMiddleware, async (req, res) => {

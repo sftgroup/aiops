@@ -12,11 +12,11 @@ const { loadDB, saveDB } = require('./db.cjs');
 
 // ─── CONFIG ─────────────────────────────────────────────
 const CONFIG = {
-  mpturboApi: process.env.MPTURBO_API || 'http://localhost:8080/api/v1',
+  // mpturboApi removed (replaced by LibTV)
   deepseekKey: process.env.DEEPSEEK_KEY || '',
   deepseekUrl: 'https://api.deepseek.com',
-  aitoearnMcp: process.env.AITO_EARN_MCP || 'http://localhost:8090/api',
-  aitoearnKey: process.env.AITO_EARN_KEY || '',
+  // aitoearnMcp removed (obsolete)
+  // aitoearnKey removed (obsolete)
   twitterConsumerKey: process.env.TWITTER_CONSUMER_KEY || '',
   twitterConsumerSecret: process.env.TWITTER_CONSUMER_SECRET || '',
 };
@@ -244,34 +244,9 @@ async function libtvGenVideo(prompt, modelName, duration) {
 }
 
 // ─── AiToEarn MCP ──────────────────────────────────────
-const AI_TOEARN_MCP = "https://aitoearn.ai/api/unified/mcp";
+// AI_TOEARN_MCP removed (AiToEarn obsolete)
 
-const MCP_TOOLS = {
-  listPlatforms: 'listChannelPlatforms',
-  createPublishFlow: 'createChannelPublishFlow',
-  listPublishRecords: 'listChannelPublishRecords',
-  getPublishRecord: 'getChannelPublishRecordByRecordId',
-  publishNow: 'publishChannelTaskNow',
-};
-
-async function mcpCall(toolName, args) {
-  // Use execSync curl to completely bypass Node.js ByteString encoding issue
-  const { execSync } = require('child_process');
-  const reqBody = JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'tools/call',
-    params: { name: toolName, arguments: args || {} },
-    id: 1,
-  });
-  // Quote values properly for bash shell
-  const apiKey = CONFIG.aitoearnKey || '';
-  const cmd = 'curl -s -X POST ' + JSON.stringify(AI_TOEARN_MCP) +
-    " -H 'Content-Type: application/json'" +
-    " -H 'x-api-key: " + apiKey.replace(/'/g, "'\\''") + "'" +
-    " -d '" + reqBody.replace(/'/g, "'\\''") + "'";
-  const result = execSync(cmd, { encoding: 'utf-8', timeout: 30000, shell: '/bin/bash' });
-  return JSON.parse(result);
-}
+// mcpCall removed (AiToEarn obsolete)
 
 module.exports = {
   CONFIG,
@@ -287,7 +262,7 @@ module.exports = {
   libtvPollNode,
   libtvGenImage,
   libtvGenVideo,
-  mcpCall,
-  MCP_TOOLS,
-  AI_TOEARN_MCP,
+  // mcpCall removed,
+  // MCP_TOOLS removed,
+  // AI_TOEARN_MCP removed,
 };
