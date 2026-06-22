@@ -23,19 +23,17 @@ module.exports = function (app) {
     const accounts = loadDB('accounts').filter(
       (a) => a.userId === req.user.id
     );
-    // Decrypt OAuth tokens when reading + lazy migrate v1→v2
+    // Decrypt OAuth tokens when reading + lazy migrate plaintext/v1→v2
     let needsSave = false;
     const decrypted = accounts.map((a) => {
+      // Twitter OAuth 1.0a (encrypted_token / encrypted_token_secret)
       if (a.encrypted_token && a.encrypted_token_secret) {
-        // Detect legacy (v1) ciphertexts, trigger lazy migration
         const tokenIsLegacy = isLegacyCiphertext(a.encrypted_token);
         const secretIsLegacy = isLegacyCiphertext(a.encrypted_token_secret);
 
         if (tokenIsLegacy || secretIsLegacy) {
-          // Decrypt first
           const oauth_token = decrypt(a.encrypted_token);
           const oauth_token_secret = decrypt(a.encrypted_token_secret);
-          // Re-encrypt in v2 format
           if (tokenIsLegacy) a.encrypted_token = encrypt(oauth_token);
           if (secretIsLegacy) a.encrypted_token_secret = encrypt(oauth_token_secret);
           needsSave = true;
@@ -48,6 +46,36 @@ module.exports = function (app) {
           oauth_token_secret: decrypt(a.encrypted_token_secret),
         };
       }
+
+      // OAuth 2.0 (access_token / refresh_token) — decrypt with lazy migration
+      if (a.access_token) {
+        const rawToken = a.access_token;
+        const rawRefresh = a.refresh_token;
+        const isEncrypted = (v) =>
+          typeof v === 'string' && v.startsWith('{') && v.includes('"v"');
+
+        let decryptedToken = rawToken;
+        let decryptedRefresh = rawRefresh;
+
+        if (isEncrypted(rawToken)) {
+          decryptedToken = decrypt(rawToken);
+        } else {
+          // Plaintext — lazy migrate to encrypted (keep original in accounts array)
+          a.access_token = encrypt(rawToken);
+          needsSave = true;
+        }
+
+        if (rawRefresh && isEncrypted(rawRefresh)) {
+          decryptedRefresh = decrypt(rawRefresh);
+        } else if (rawRefresh) {
+          // Plaintext — lazy migrate
+          a.refresh_token = encrypt(rawRefresh);
+          needsSave = true;
+        }
+
+        return { ...a, access_token: decryptedToken, refresh_token: decryptedRefresh };
+      }
+
       return a;
     });
 

@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const { loadDB, saveDB } = require('../db.cjs');
 const { uuid } = require('../utils/uuid.cjs');
 const { authMiddleware } = require('../middleware/auth.cjs');
+const { encrypt } = require('../config.cjs');
 
 const pkceStore = {};
 
@@ -219,9 +220,10 @@ module.exports = function (app) {
           a.platformUserId === uid
       );
       if (existing) {
-        existing.access_token = td.access_token;
-        existing.refresh_token =
-          td.refresh_token || existing.refresh_token;
+        existing.access_token = encrypt(td.access_token);
+        if (td.refresh_token) {
+          existing.refresh_token = encrypt(td.refresh_token);
+        }
         existing.name = uname;
         existing.updatedAt = Date.now();
       } else {
@@ -231,8 +233,8 @@ module.exports = function (app) {
           platform: p,
           platformUserId: uid,
           name: uname,
-          access_token: td.access_token,
-          refresh_token: td.refresh_token || null,
+          access_token: encrypt(td.access_token),
+          refresh_token: td.refresh_token ? encrypt(td.refresh_token) : null,
           createdAt: Date.now(),
         });
       }
