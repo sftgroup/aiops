@@ -207,6 +207,8 @@ if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET is not configured');
 }
 
+console.log('STORAGE_ENCRYPTION_KEY: configured ✓');
+
 if (!CONFIG.deepseekKey) {
   console.warn('WARN: DEEPSEEK_KEY is not set. AI text generation will fail.');
 }

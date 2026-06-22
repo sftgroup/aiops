@@ -21,31 +21,94 @@ const CONFIG = {
   twitterConsumerSecret: process.env.TWITTER_CONSUMER_SECRET || '',
 };
 
-// ─── Encryption Helpers (AES-256-GCM) ──────────────────
-const ENCRYPTION_KEY = process.env.STORAGE_ENCRYPTION_KEY || 'aiops-default-key-change-me-32b';
+// ─── Encryption Config ──────────────────────────────────
+const ENCRYPTION_KEY = process.env.STORAGE_ENCRYPTION_KEY;
+if (!ENCRYPTION_KEY) {
+  console.error(
+    'FATAL: STORAGE_ENCRYPTION_KEY is not set. ' +
+    'Generate one with: openssl rand -hex 32\n' +
+    'Set it in .env or environment variables.'
+  );
+  process.exitCode = 1;
+  throw new Error('STORAGE_ENCRYPTION_KEY is not configured');
+}
+
+// ─── Key Derivation Cache ──────────────────────────────
+const _derivedKeyCache = new Map();
+
+function deriveKey(saltHex) {
+  if (_derivedKeyCache.has(saltHex)) {
+    return _derivedKeyCache.get(saltHex);
+  }
+  const key = crypto.scryptSync(ENCRYPTION_KEY, Buffer.from(saltHex, 'hex'), 32);
+  _derivedKeyCache.set(saltHex, key);
+  return key;
+}
+
+// ─── Legacy constants (backward-compat decryption only) ──
+const LEGACY_SALT_HEX = Buffer.from('aiops-salt', 'utf8').toString('hex');
+
+// ─── Encryption Helpers (AES-256-GCM, v2 with random salt) ──
 
 function encrypt(text) {
-  const key = crypto.scryptSync(ENCRYPTION_KEY, 'aiops-salt', 32);
+  const salt = crypto.randomBytes(16);
+  const saltHex = salt.toString('hex');
+  const key = deriveKey(saltHex);
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   const tag = cipher.getAuthTag().toString('hex');
-  return JSON.stringify({ iv: iv.toString('hex'), tag, data: encrypted });
+  return JSON.stringify({
+    v: 2,
+    salt: saltHex,
+    iv: iv.toString('hex'),
+    tag,
+    data: encrypted,
+  });
 }
 
 function decrypt(encryptedStr) {
   try {
-    const { iv, tag, data } = JSON.parse(encryptedStr);
-    const key = crypto.scryptSync(ENCRYPTION_KEY, 'aiops-salt', 32);
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'hex'));
-    decipher.setAuthTag(Buffer.from(tag, 'hex'));
-    let decrypted = decipher.update(data, 'hex', 'utf8');
+    const parsed = JSON.parse(encryptedStr);
+
+    if (parsed.v === 2) {
+      // v2: random salt
+      const key = deriveKey(parsed.salt);
+      const decipher = crypto.createDecipheriv(
+        'aes-256-gcm', key, Buffer.from(parsed.iv, 'hex')
+      );
+      decipher.setAuthTag(Buffer.from(parsed.tag, 'hex'));
+      let decrypted = decipher.update(parsed.data, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    }
+
+    // v1 (legacy): fixed salt 'aiops-salt'
+    const key = deriveKey(LEGACY_SALT_HEX);
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm', key, Buffer.from(parsed.iv, 'hex')
+    );
+    decipher.setAuthTag(Buffer.from(parsed.tag, 'hex'));
+    let decrypted = decipher.update(parsed.data, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     return decrypted;
   } catch {
-    // If decryption fails, return as-is (backward compat)
+    // If decryption fails, return as-is (backward compat for unencrypted data)
     return encryptedStr;
+  }
+}
+
+/**
+ * Check if a ciphertext string is in legacy (v1) format.
+ * Legacy format: { iv, tag, data } — no "v" or "salt" field.
+ */
+function isLegacyCiphertext(encryptedStr) {
+  try {
+    const parsed = JSON.parse(encryptedStr);
+    return !!(parsed.v !== 2 && parsed.iv && parsed.tag && parsed.data);
+  } catch {
+    return false;
   }
 }
 
@@ -253,6 +316,7 @@ module.exports = {
   DATA_DIR,
   encrypt,
   decrypt,
+  isLegacyCiphertext,
   twitterOAuth,
   TWITTER_API,
   refreshLibtvToken,

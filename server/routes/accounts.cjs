@@ -9,6 +9,7 @@ const {
   TWITTER_API,
   encrypt,
   decrypt,
+  isLegacyCiphertext,
 } = require('../config.cjs');
 
 // Temporary store for request tokens before PIN verification
@@ -22,9 +23,25 @@ module.exports = function (app) {
     const accounts = loadDB('accounts').filter(
       (a) => a.userId === req.user.id
     );
-    // Decrypt OAuth tokens when reading
+    // Decrypt OAuth tokens when reading + lazy migrate v1→v2
+    let needsSave = false;
     const decrypted = accounts.map((a) => {
       if (a.encrypted_token && a.encrypted_token_secret) {
+        // Detect legacy (v1) ciphertexts, trigger lazy migration
+        const tokenIsLegacy = isLegacyCiphertext(a.encrypted_token);
+        const secretIsLegacy = isLegacyCiphertext(a.encrypted_token_secret);
+
+        if (tokenIsLegacy || secretIsLegacy) {
+          // Decrypt first
+          const oauth_token = decrypt(a.encrypted_token);
+          const oauth_token_secret = decrypt(a.encrypted_token_secret);
+          // Re-encrypt in v2 format
+          if (tokenIsLegacy) a.encrypted_token = encrypt(oauth_token);
+          if (secretIsLegacy) a.encrypted_token_secret = encrypt(oauth_token_secret);
+          needsSave = true;
+          return { ...a, oauth_token, oauth_token_secret };
+        }
+
         return {
           ...a,
           oauth_token: decrypt(a.encrypted_token),
@@ -33,6 +50,11 @@ module.exports = function (app) {
       }
       return a;
     });
+
+    if (needsSave) {
+      saveDB('accounts', accounts);
+    }
+
     res.json(decrypted);
   });
 

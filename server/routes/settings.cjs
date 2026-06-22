@@ -122,7 +122,7 @@ module.exports = function (app) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': '*** ' + key,
+          'Authorization': 'Bearer ' + key,
         },
         body: JSON.stringify({
           model: 'deepseek-chat',
