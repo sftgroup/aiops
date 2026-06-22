@@ -62,8 +62,8 @@ export function useAuth() { return useContext(AuthContext); }
 
 export function api(token: string | null) {
   return {
-    get: async (url: string) => {
-      const r = await fetch(`${API}${url}`, { headers: { Authorization: `Bearer ${token}` } });
+    get: async (url: string, signal?: AbortSignal) => {
+      const r = await fetch(`${API}${url}`, { headers: { Authorization: `Bearer ${token}` }, signal });
       if (!r.ok) throw new Error((await r.json()).error || '请求失败');
       return r.json();
     },

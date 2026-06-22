@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth, api } from '../AuthContext';
 import toast from 'react-hot-toast';
 import {
@@ -37,16 +37,18 @@ export default function VideoPage() {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loadingVideos, setLoadingVideos] = useState(true);
   const pollRef = useRef<number | null>(null);
-  const videoDoneRef = useRef<string | null>(null); // track which video id just completed
+  const videoDoneRef = useRef<string | null>(null);
+  const timeoutRef = useRef<number | null>(null);       // stores the 10min timeout
+  const abortRef = useRef<AbortController | null>(null); // cancels in-flight fetch on unmount
 
-  useEffect(() => {
-    loadVideos();
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [token]);
+  const loadVideos = useCallback(async () => {
+    // Cancel any previous in-flight request (e.g. if called while another is pending)
+    abortRef.current?.abort();
+    const abort = new AbortController();
+    abortRef.current = abort;
 
-  const loadVideos = async () => {
     try {
-      const t = await api(token!).get('/team-tasks/today') as TeamTask;
+      const t = await api(token!).get('/team-tasks/today', abort.signal) as TeamTask;
       if (t?.videos) {
         // Merge backend data with local state — don't replace, so generating items stay visible
         setVideos(prev => {
@@ -67,9 +69,21 @@ export default function VideoPage() {
           return updated;
         });
       }
-    } catch { /* ignore */ }
+    } catch (e: any) {
+      if (e.name === 'AbortError') return; // component unmounted, skip setState
+      /* ignore */
+    }
     setLoadingVideos(false);
-  };
+  }, [token]);
+
+  useEffect(() => {
+    loadVideos();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      abortRef.current?.abort();
+    };
+  }, [token, loadVideos]);
 
   const handleGenerateScript = async () => {
     if (!subject.trim()) return toast.error('请输入视频主题');
@@ -109,8 +123,13 @@ export default function VideoPage() {
 
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = window.setInterval(async () => {
+        // Cancel previous polling fetch before starting a new one
+        abortRef.current?.abort();
+        const pollAbort = new AbortController();
+        abortRef.current = pollAbort;
+
         try {
-          const t = await api(token!).get('/team-tasks/today') as TeamTask;
+          const t = await api(token!).get('/team-tasks/today', pollAbort.signal) as TeamTask;
           
           // 更新进度
           const prog = t.progress?.videomaker;
@@ -126,24 +145,31 @@ export default function VideoPage() {
           if (vid?.videoUrl) {
             clearInterval(pollRef.current!);
             pollRef.current = null;
+            if (timeoutRef.current) { // cancel the 10min guard since we're done
+              clearTimeout(timeoutRef.current);
+              timeoutRef.current = null;
+            }
             loadVideos(); // 刷新全列表
             setProgressMsg('');
             setGenerating(false);
             toast.success('🎬 视频生成完成！');
             return;
           }
-        } catch {}
+        } catch (e: any) {
+          if (e.name === 'AbortError') return; // component unmounted
+        }
       }, 4000);
 
-      // 超时保护（10分钟）
-      setTimeout(() => {
+      // 超时保护（10分钟）— stored in ref so cleanup can clear it
+      timeoutRef.current = window.setTimeout(() => {
         if (pollRef.current) {
           clearInterval(pollRef.current);
           pollRef.current = null;
-          setGenerating(false);
-          loadVideos();
-          toast.error('生成超时，请重试');
         }
+        timeoutRef.current = null;
+        setGenerating(false);
+        loadVideos();
+        toast.error('生成超时，请重试');
       }, 600000);
 
     } catch (e: any) { toast.error(e.message); setGenerating(false); }
