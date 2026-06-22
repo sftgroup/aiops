@@ -12,11 +12,13 @@ const { CONFIG, DATA_DIR } = require('../config.cjs');
 const { genVideo, genImage } = require('../libtv-cli.cjs');
 
 module.exports = function (app, ctx) {
-  const { wsBroadcast, taskQueue } = ctx || {};
+  const { wsBroadcastToUser, taskQueue } = ctx || {};
 
-  // ─── 工具：推送或静默忽略 ───────────────────────────
-  function push(taskId, data) {
-    if (wsBroadcast) wsBroadcast({ type: 'task', taskId, ...data });
+  // ─── 工具：按用户推送或静默忽略 ────────────────────
+  function push(taskId, userId, data) {
+    if (wsBroadcastToUser && userId) {
+      wsBroadcastToUser(userId, { type: 'task', taskId, ...data });
+    }
   }
 
   // GST /api/stats — Dashboard statistics
@@ -167,6 +169,7 @@ ${style ? `风格：${style}` : ''}
       const { subject, style } = req.body;
       if (!subject) return res.status(400).json({ error: '主题必填' });
 
+      const requesterUserId = req.user?.id;
       const taskId = require('crypto').randomUUID();
       const taskState = {
         step: 'queued', progress: 0, message: '排队中...',
@@ -184,29 +187,29 @@ ${style ? `风格：${style}` : ''}
         taskState.step = 'starting';
         taskState.progress = 5;
         taskState.message = '初始化...';
-        push(taskId, { step: 'starting', progress: 5, message: '初始化...' });
+        push(taskId, requesterUserId, { step: 'starting', progress: 5, message: '初始化...' });
 
         try {
           const url = await genImage(subject, 'AI', { style }, (p) => {
             // genImage 回调：更新状态 + 推送
             Object.assign(taskState, p);
-            push(taskId, p);
+            push(taskId, requesterUserId, p);
           });
 
           if (url) {
             taskState.step = 'completed';
             taskState.progress = 100;
             taskState.url = url;
-            push(taskId, { step: 'completed', progress: 100, url });
+            push(taskId, requesterUserId, { step: 'completed', progress: 100, url });
           } else {
             taskState.step = 'failed';
             taskState.error = '配图生成超时或失败';
-            push(taskId, { step: 'failed', error: '配图生成超时或失败' });
+            push(taskId, requesterUserId, { step: 'failed', error: '配图生成超时或失败' });
           }
         } catch (e) {
           taskState.step = 'failed';
           taskState.error = e.message;
-          push(taskId, { step: 'failed', error: e.message });
+          push(taskId, requesterUserId, { step: 'failed', error: e.message });
         }
 
         // 5 分钟后清理

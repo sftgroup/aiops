@@ -89,12 +89,13 @@ module.exports = function (app) {
         'IMAGE_GEN_MODEL_ID=' + (settings.image_gen_model_id || ''),
       ];
 
-      let existingEnv = '';
-      try {
-        existingEnv = fs.readFileSync(ENV_PATH, 'utf8');
-      } catch (e) {
-        /* file doesn't exist yet */
+      // Ensure .env exists with secure permissions before reading
+      if (!fs.existsSync(ENV_PATH)) {
+        fs.writeFileSync(ENV_PATH, '', 'utf8');
+        fs.chmodSync(ENV_PATH, fs.constants.S_IRUSR | fs.constants.S_IWUSR);
       }
+
+      let existingEnv = fs.readFileSync(ENV_PATH, 'utf8');
       for (const line of envLines) {
         const key = line.split('=')[0];
         const regex = new RegExp('^' + key + '=.*', 'm');
@@ -105,6 +106,8 @@ module.exports = function (app) {
         }
       }
       fs.writeFileSync(ENV_PATH, existingEnv.trim() + '\n', 'utf8');
+      // Lock file permissions to owner-read/write only
+      fs.chmodSync(ENV_PATH, fs.constants.S_IRUSR | fs.constants.S_IWUSR);
 
       saveDB('settings', settings);
       res.json({ status: 'ok', message: '配置已保存' });
@@ -117,12 +120,12 @@ module.exports = function (app) {
   app.post('/api/settings/test-deepseek', authMiddleware, async (req, res) => {
     try {
       const { key } = req.body;
-      if (!key) return res.status(400).json({ status: 'error', message: '缺少 API Key' });
+      if (!key || !key.trim()) return res.status(400).json({ status: 'error', message: '缺少 API Key' });
       const resp = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': '*** ' + key,
+          'Authorization': 'Bearer ' + key.trim(),
         },
         body: JSON.stringify({
           model: 'deepseek-chat',

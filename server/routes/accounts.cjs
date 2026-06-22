@@ -22,18 +22,32 @@ module.exports = function (app) {
     const accounts = loadDB('accounts').filter(
       (a) => a.userId === req.user.id
     );
-    // Decrypt OAuth tokens when reading
-    const decrypted = accounts.map((a) => {
-      if (a.encrypted_token && a.encrypted_token_secret) {
-        return {
-          ...a,
-          oauth_token: decrypt(a.encrypted_token),
-          oauth_token_secret: decrypt(a.encrypted_token_secret),
-        };
+    // Lazy-migrate v1→v2 and strip sensitive tokens before returning to frontend
+    let needsSave = false;
+    const safeAccounts = accounts.map((a) => {
+      // v1 legacy accounts: encrypt and persist
+      if (
+        !a.encrypted_token &&
+        !a.encrypted_token_secret &&
+        typeof a.oauth_token === 'string' &&
+        typeof a.oauth_token_secret === 'string'
+      ) {
+        a.encrypted_token = encrypt(a.oauth_token);
+        a.encrypted_token_secret = encrypt(a.oauth_token_secret);
+        needsSave = true;
       }
-      return a;
+      // Strip all token fields from the response
+      const {
+        oauth_token,
+        oauth_token_secret,
+        encrypted_token,
+        encrypted_token_secret,
+        ...safe
+      } = a;
+      return safe;
     });
-    res.json(decrypted);
+    if (needsSave) saveDB('accounts', accounts);
+    res.json(safeAccounts);
   });
 
   // POST /api/accounts

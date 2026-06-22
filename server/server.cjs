@@ -19,6 +19,7 @@ const { WebSocketServer } = require('ws');
 
 const { loadDB, saveDB } = require('./db.cjs');
 const { CONFIG } = require('./config.cjs');
+const { jwt } = require('./middleware/auth.cjs');
 
 // ─── App Setup ───────────────────────────────────────────
 const app = express();
@@ -60,11 +61,30 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 const wsClients = new Set();
 
 wss.on('connection', (ws) => {
-  wsClients.add(ws);
   ws.isAlive = true;
+  ws.isAuthenticated = false;
+  ws.userId = null;
   console.log(`[ws] Client connected (total: ${wsClients.size})`);
 
   ws.on('pong', () => { ws.isAlive = true; });
+
+  // WS-02: JWT 认证消息处理
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw.toString());
+      if (msg.type === 'auth' && msg.token) {
+        const decoded = jwt.verify(msg.token, process.env.JWT_SECRET || '');
+        ws.userId = decoded.id;
+        ws.isAuthenticated = true;
+        wsClients.add(ws);
+        ws.send(JSON.stringify({ type: 'auth_ok', userId: ws.userId }));
+        console.log(`[ws] Client authenticated as ${ws.userId} (total: ${wsClients.size})`);
+      }
+    } catch {
+      ws.send(JSON.stringify({ type: 'auth_error' }));
+    }
+  });
+
   ws.on('close', () => {
     wsClients.delete(ws);
     console.log(`[ws] Client disconnected (total: ${wsClients.size})`);
@@ -84,11 +104,22 @@ const heartbeatTimer = setInterval(() => {
   });
 }, 30000);
 
-// 广播函数：向所有连接推送 JSON 消息
+// ⚠️ 全局广播，仅用于系统级通知（公告/运维消息）
+// 任务推送请使用 wsBroadcastToUser(userId, data) 确保用户隔离
 function wsBroadcast(data) {
   const msg = JSON.stringify(data);
   for (const ws of wsClients) {
     if (ws.readyState === 1) ws.send(msg);
+  }
+}
+
+// 按用户推送：只给指定 userId 的所有连接发送消息
+function wsBroadcastToUser(userId, data) {
+  const msg = JSON.stringify(data);
+  for (const ws of wsClients) {
+    if (ws.isAuthenticated && ws.userId === userId && ws.readyState === 1) {
+      ws.send(msg);
+    }
   }
 }
 
@@ -125,12 +156,12 @@ const taskQueue = {
 };
 
 // ─── Mount Routes (pass WebSocket broadcast + queue) ────
-const routeContext = { wsBroadcast, taskQueue };
+const routeContext = { wsBroadcast, wsBroadcastToUser, taskQueue };
 require('./routes/auth.cjs')(app);
 require('./routes/contents.cjs')(app);
 require('./routes/accounts.cjs')(app);
 require('./routes/publish.cjs')(app);
-require('./routes/team.cjs')(app);
+require('./routes/team.cjs')(app, routeContext);
 require('./routes/settings.cjs')(app);
 require("./routes/teams.cjs")(app);
 require('./routes/oauth.cjs')(app);

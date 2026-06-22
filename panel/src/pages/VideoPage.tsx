@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth, api } from '../AuthContext';
+import { useWebSocket } from '../hooks/useWebSocket';
 import toast from 'react-hot-toast';
 import {
   Loader2, Sparkles, Video, Play, Clock, Timer,
@@ -20,6 +21,8 @@ interface TeamTask {
   videos: VideoItem[];
   progress?: {
     videomaker?: string;
+    errorMessage?: string;
+    [key: string]: string | undefined;
   };
 }
 
@@ -34,34 +37,104 @@ export default function VideoPage() {
   const [generatingScript, setGeneratingScript] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loadingVideos, setLoadingVideos] = useState(true);
   const pollRef = useRef<number | null>(null);
-  const videoDoneRef = useRef<string | null>(null); // track which video id just completed
+  const videoDoneRef = useRef<string | null>(null);
+  const timeoutRef = useRef<number | null>(null);       // stores the 10min timeout
+  const abortRef = useRef<AbortController | null>(null); // cancels in-flight fetch on unmount
+  const [wsFallback, setWsFallback] = useState(false);
+  const wsActiveTaskRef = useRef<string | null>(null);
+
+  // WebSocket setup
+  const ws = useWebSocket({
+    onProgress(data) {
+      // Handle team_progress messages
+      if (data.taskId === wsActiveTaskRef.current) {
+        if (data.status === 'running') {
+          const stepLabels = ['准备素材...', '生成视频片段...', '合成最终视频...', '即将完成...'];
+          const idx = ['copywriter','imagegen','videomaker','stitcher'].indexOf(data.step);
+          setProgressMsg(idx >= 0 ? stepLabels[Math.min(idx, stepLabels.length-1)] : data.step);
+        } else if (data.status === 'done') {
+          setProgressMsg('合成完成');
+        } else if (data.status === 'error') {
+          setGenerating(false);
+          setProgressMsg('');
+          setErrorMsg(data.errorMsg || '视频生成失败，请重试');
+          clearPollAndTimeout();
+          wsActiveTaskRef.current = null;
+        }
+      }
+    },
+    onVideoReady(data) {
+      if (data.taskId === wsActiveTaskRef.current) {
+        clearPollAndTimeout();
+        wsActiveTaskRef.current = null;
+        loadVideos();
+        setProgressMsg('');
+        setGenerating(false);
+        toast.success('🎬 视频生成完成！');
+      }
+    },
+    onConnectionChange(connected) {
+      setWsFallback(!connected);
+    },
+  });
+
+  const loadVideos = useCallback(async () => {
+    // Cancel any previous in-flight request (e.g. if called while another is pending)
+    abortRef.current?.abort();
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    try {
+      const t = await api(token!).get('/team-tasks/today', abort.signal) as TeamTask;
+      if (t?.videos) {
+        // Check if any video-maker is in error state (persistent error display)
+        if (t.progress?.videomaker === 'error' && !generating) {
+          setErrorMsg(t.progress?.errorMessage || '视频生成失败，请重试');
+        }
+
+        // Merge backend data with local state — don't replace, so generating items stay visible
+        setVideos(prev => {
+          const updated = [...prev];
+          for (const v of t.videos) {
+            const idx = updated.findIndex(p => p.id === v.id);
+            if (idx >= 0) {
+              // Check if videoUrl just became available
+              if (v.videoUrl && !updated[idx].videoUrl) {
+                videoDoneRef.current = v.id;
+                setTimeout(() => { videoDoneRef.current = null; }, 2000);
+              }
+              updated[idx] = v; // update with server data
+            } else {
+              updated.push(v);
+            }
+          }
+          return updated;
+        });
+      }
+    } catch (e: any) {
+      if (e.name === 'AbortError') return; // component unmounted, skip setState
+      /* ignore */
+    }
+    setLoadingVideos(false);
+  }, [token]);
+
+  // Helper: clear polling + timeout
+  const clearPollAndTimeout = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+  }, []);
 
   useEffect(() => {
     loadVideos();
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [token]);
-
-  const loadVideos = async () => {
-    try {
-      const t = await api(token!).get('/team-tasks/today') as TeamTask;
-      if (t?.videos) {
-        // 检测是否有新完成的视频
-        setVideos(prev => {
-          for (const v of t.videos) {
-            if (v.videoUrl && !prev.find(p => p.id === v.id)?.videoUrl) {
-              videoDoneRef.current = v.id;
-              setTimeout(() => { videoDoneRef.current = null; }, 2000);
-            }
-          }
-          return t.videos;
-        });
-      }
-    } catch { /* ignore */ }
-    setLoadingVideos(false);
-  };
+    return () => {
+      clearPollAndTimeout();
+      abortRef.current?.abort();
+    };
+  }, [token, loadVideos, clearPollAndTimeout]);
 
   const handleGenerateScript = async () => {
     if (!subject.trim()) return toast.error('请输入视频主题');
@@ -78,22 +151,43 @@ export default function VideoPage() {
     if (!subject.trim()) return toast.error('请输入视频主题');
     setGenerating(true);
     setProgressMsg('连接 LibTV...');
-    setVideos(prev => prev.filter(v => v.videoUrl)); // keep only completed ones in gallery
     try {
       const d = await api(token!).post('/team-tasks/today/video', {
         subject, script, duration, cameraMovement: cameraMovement || undefined,
       });
       toast.success('📽️ 视频已提交，实时追踪中...');
+      // Add new video to list with generating status (don't filter out incomplete ones)
+      const tempVideo: VideoItem = {
+        id: d.id,
+        subject,
+        script,
+        videoUrl: '',
+        duration,
+        createdAt: new Date().toISOString(),
+      };
+      setVideos(prev => [...prev, tempVideo]);
       setProgressMsg('已提交，等待队列...');
 
-      // 实时轮询 progress
+      // Register this task for WS events
+      wsActiveTaskRef.current = d.id;
+
+      // 实时轮询 progress (fallback when WS not available)
       let stepTimer = 0;
       const steps = ['准备素材...', '生成视频片段...', '合成最终视频...', '即将完成...'];
 
       if (pollRef.current) clearInterval(pollRef.current);
+      // Only start polling if WS is not connected, or as safety backup
       pollRef.current = window.setInterval(async () => {
+        // Cancel previous polling fetch before starting a new one
+        abortRef.current?.abort();
+        const pollAbort = new AbortController();
+        abortRef.current = pollAbort;
+
+        // If WS is connected, skip polling (rely on WS events)
+        if (ws.isAuthenticated) return;
+
         try {
-          const t = await api(token!).get('/team-tasks/today') as TeamTask;
+          const t = await api(token!).get('/team-tasks/today', pollAbort.signal) as TeamTask;
           
           // 更新进度
           const prog = t.progress?.videomaker;
@@ -102,6 +196,17 @@ export default function VideoPage() {
             setProgressMsg(steps[stepTimer]);
           } else if (prog === 'done') {
             setProgressMsg('合成完成');
+          } else if (prog === 'error') {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            if (timeoutRef.current) {
+              clearTimeout(timeoutRef.current);
+              timeoutRef.current = null;
+            }
+            wsActiveTaskRef.current = null;
+            setGenerating(false);
+            setErrorMsg(t.progress?.errorMessage || '视频生成失败，请重试');
+            return;
           }
 
           // 检测视频完成
@@ -109,27 +214,44 @@ export default function VideoPage() {
           if (vid?.videoUrl) {
             clearInterval(pollRef.current!);
             pollRef.current = null;
+            if (timeoutRef.current) { // cancel the 10min guard since we're done
+              clearTimeout(timeoutRef.current);
+              timeoutRef.current = null;
+            }
+            wsActiveTaskRef.current = null;
             loadVideos(); // 刷新全列表
             setProgressMsg('');
             setGenerating(false);
             toast.success('🎬 视频生成完成！');
             return;
           }
-        } catch {}
+        } catch (e: any) {
+          if (e.name === 'AbortError') return; // component unmounted
+        }
       }, 4000);
 
-      // 超时保护（10分钟）
-      setTimeout(() => {
+      // 超时保护（10分钟）— stored in ref so cleanup can clear it
+      timeoutRef.current = window.setTimeout(() => {
         if (pollRef.current) {
           clearInterval(pollRef.current);
           pollRef.current = null;
-          setGenerating(false);
-          loadVideos();
-          toast.error('生成超时，请重试');
         }
+        timeoutRef.current = null;
+        setGenerating(false);
+        loadVideos();
+        toast.error('生成超时，请重试');
       }, 600000);
 
     } catch (e: any) { toast.error(e.message); setGenerating(false); }
+  };
+
+  const handleRetryVideo = () => {
+    setErrorMsg(null);
+    handleGenerateVideo();
+  };
+
+  const handleDismissError = () => {
+    setErrorMsg(null);
   };
 
   const handleDeleteVideo = async (videoId: string) => {
@@ -326,6 +448,41 @@ export default function VideoPage() {
           </div>
         </div>
 
+        {/* Error Banner */}
+        {errorMsg && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <span className="text-red-400 text-lg leading-none mt-0.5">⚠️</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-red-300">生成失败</p>
+                <p className="text-xs text-red-400/80 mt-1 break-words">{errorMsg}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRetryVideo}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-red-500/20 text-red-300 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-all"
+              >
+                <span>↻</span> 重试
+              </button>
+              <button
+                onClick={handleDismissError}
+                className="px-3 py-2 text-xs font-medium text-gray-400 border border-dark-border rounded-lg hover:text-gray-300 hover:bg-dark-bg transition-all"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* WS fallback banner */}
+        {wsFallback && generating && (
+          <div className="flex items-center gap-2 px-3 py-1.5 mb-2 text-xs text-yellow-400 bg-yellow-500/5 border border-yellow-500/20 rounded-lg">
+            <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
+            实时推送不可用，已切换轮询模式
+          </div>
+        )}
+
         {/* Generate Button & Progress */}
         <button
           onClick={handleGenerateVideo}
@@ -408,8 +565,20 @@ export default function VideoPage() {
                   ) : (
                     <div className="w-full aspect-video bg-gradient-to-br from-dark-bg to-purple-950/20 flex items-center justify-center">
                       <div className="text-center">
-                        <Video size={36} className="mx-auto text-gray-600" />
-                        <p className="text-xs text-gray-600 mt-2">生成中...</p>
+                        <div className="w-12 h-12 mx-auto rounded-full bg-purple-500/10 flex items-center justify-center animate-pulse">
+                          <Loader2 size={22} className="text-purple-400 animate-spin" />
+                        </div>
+                        <div className="space-y-1.5 mt-3">
+                          <div className="h-2.5 w-28 bg-gray-700/50 rounded-full animate-pulse mx-auto" />
+                          <div className="h-2 w-20 bg-gray-700/30 rounded-full animate-pulse mx-auto" />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-3">
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" />
+                            AI 生成中...
+                            <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" />
+                          </span>
+                        </p>
                       </div>
                     </div>
                   )}
