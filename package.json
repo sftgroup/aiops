@@ -1,0 +1,19 @@
+{
+  "name": "aiops",
+  "version": "1.10.0",
+  "private": true,
+  "description": "AI Operations Platform — 视频创作与内容发布",
+  "scripts": {
+    "build": "cd panel && npm run build",
+    "seed": "python3 scripts/seed_test_data.py",
+    "test": "node tests/smoke-test.js",
+    "test:e2e": "node tests/e2e-test.js",
+    "test:qa": "bash scripts/run-qa.sh",
+    "test:security": "node ../agent-templates/01-security-audit.js --project-root .",
+    "deploy": "bash v4-agents/start.sh deploy",
+    "deploy:skip-tests": "bash v4-agents/start.sh deploy --skip-tests",
+    "status": "bash v4-agents/start.sh status",
+    "logs": "bash v4-agents/start.sh logs",
+    "restart": "bash v4-agents/start.sh restart"
+  }
+}

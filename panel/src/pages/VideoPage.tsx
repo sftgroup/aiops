@@ -134,7 +134,7 @@ export default function VideoPage() {
 
   const handleDeleteVideo = async (videoId: string) => {
     try {
-      await api(token!).del('/api/team-tasks/today/video/' + videoId);
+      await api(token!).del('team-tasks/today/video/' + videoId);
       setVideos(prev => prev.filter(v => v.id !== videoId));
       toast.success('已删除');
     } catch (e: any) { toast.error(e.message || '删除失败'); }

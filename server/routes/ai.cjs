@@ -76,7 +76,7 @@ module.exports = function (app, ctx) {
   app.post('/api/videos/scripts', authMiddleware, async (req, res) => {
     try {
       const { subject, language, duration } = req.body;
-      const vidDuration = parseInt(duration) || 60;
+      const vidDuration = parseInt(duration) > 0 ? parseInt(duration) : 60;
       const timeDesc = vidDuration <= 5 ? '5秒' : vidDuration <= 10 ? '10秒' : vidDuration <= 30 ? '30秒' : `${vidDuration}秒`;
       const resp = await fetch(`${CONFIG.deepseekUrl}/v1/chat/completions`, {
         method: 'POST',
