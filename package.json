@@ -15,5 +15,8 @@
     "status": "bash v4-agents/start.sh status",
     "logs": "bash v4-agents/start.sh logs",
     "restart": "bash v4-agents/start.sh restart"
+  },
+  "dependencies": {
+    "express-rate-limit": "^8.5.2"
   }
 }

@@ -17,6 +17,7 @@ const {
   genImage: libtvGenImage,
 } = require('../libtv-cli.cjs');
 const { Mutex } = require('async-mutex');
+const deepseek = require('../services/deepseek.cjs');
 
 // Global mutex for all team-task write operations.
 // Guards every load-modify-save cycle against concurrent overwrites.
@@ -455,30 +456,15 @@ module.exports = function (app) {
                   platformsText +
                   '\n输出格式：标题---正文---平台变体---图片描述1|图片描述2|...';
 
-                const resp = await fetch(
-                  'https://api.deepseek.com/chat/completions',
-                  {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': 'Bearer ' + deepseekKey,
-                    },
-                    body: JSON.stringify({
-                      model: 'deepseek-chat',
-                      messages: [
-                        {
-                          role: 'system',
-                          content: '你是专业社交媒体内容创作者。',
-                        },
-                        { role: 'user', content: prompt },
-                      ],
-                      max_tokens: 4000,
-                    }),
-                  }
-                );
-                const d = await resp.json();
-                const raw =
-                  d.choices?.[0]?.message?.content || '';
+                const d = await deepseek.chatCompletion({
+                  apiKey: deepseekKey,
+                  messages: [
+                    { role: 'system', content: '你是专业社交媒体内容创作者。' },
+                    { role: 'user', content: prompt },
+                  ],
+                  maxTokens: 4000,
+                });
+                const raw = deepseek.extractContent(d);
 
                 const parts = raw.split('---');
                 const title =
@@ -613,28 +599,12 @@ module.exports = function (app) {
                       '为短视频写一段15秒的旁白脚本，主题：' +
                       task.subject +
                       '。只需输出旁白文本。';
-                    const sResp = await fetch(
-                      'https://api.deepseek.com/chat/completions',
-                      {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization':
-                            'Bearer ' + deepseekKey,
-                        },
-                        body: JSON.stringify({
-                          model: 'deepseek-chat',
-                          messages: [
-                            { role: 'user', content: prompt },
-                          ],
-                          max_tokens: 1000,
-                        }),
-                      }
-                    );
-                    const sData = await sResp.json();
-                    video.script =
-                      sData.choices?.[0]?.message
-                        ?.content || '';
+                    const sData = await deepseek.chatCompletion({
+                      apiKey: deepseekKey,
+                      messages: [{ role: 'user', content: prompt }],
+                      maxTokens: 1000,
+                    });
+                    video.script = deepseek.extractContent(sData);
                   } catch (e) {
                     console.error(
                       '[team] script gen error:',
@@ -825,34 +795,21 @@ module.exports = function (app) {
           for (let i = 0; i < articles.length; i++) {
             const art = articles[i];
             try {
-              const reviewResp = await fetch(
-                'https://api.deepseek.com/chat/completions',
-                {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + deepseekKey,
+              const reviewData = await deepseek.chatCompletion({
+                apiKey: deepseekKey,
+                messages: [
+                  {
+                    role: 'user',
+                    content:
+                      '你是内容审核员。请判断以下帖子是否适合发布（检查：敏感词、质量、合规）。回复格式：通过 或 不通过:原因。\\n\\n标题：' +
+                      art.title +
+                      '\\n\\n正文：' +
+                      art.body,
                   },
-                  body: JSON.stringify({
-                    model: 'deepseek-chat',
-                    messages: [
-                      {
-                        role: 'user',
-                        content:
-                          '你是内容审核员。请判断以下帖子是否适合发布（检查：敏感词、质量、合规）。回复格式：通过 或 不通过:原因。\\n\\n标题：' +
-                          art.title +
-                          '\\n\\n正文：' +
-                          art.body,
-                      },
-                    ],
-                    max_tokens: 200,
-                  }),
-                }
-              );
-              const reviewData = await reviewResp.json();
-              const reviewText =
-                reviewData.choices?.[0]?.message
-                  ?.content || '';
+                ],
+                maxTokens: 200,
+              });
+              const reviewText = deepseek.extractContent(reviewData);
               if (reviewText.includes('不通过')) {
                 art.review.status = 'reject';
                 art.review.reason = reviewText

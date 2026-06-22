@@ -11,9 +11,14 @@ const {
   decrypt,
   isLegacyCiphertext,
 } = require('../config.cjs');
+const { TTLStore } = require('../utils/ttl-store.cjs');
 
 // Temporary store for request tokens before PIN verification
-const requestTokenStore = {};
+// 5 minute TTL, swept every 60 seconds
+const requestTokenStore = new TTLStore({
+  ttl: 5 * 60 * 1000,    // 5 minutes
+  sweepInterval: 60 * 1000, // sweep every 60 seconds
+});
 
 module.exports = function (app) {
   // ─── Account CRUD ──────────────────────────────────
@@ -190,11 +195,11 @@ module.exports = function (app) {
             .json({ error: '获取Request Token失败', detail: text });
         }
 
-        requestTokenStore[params.oauth_token] = {
+        requestTokenStore.set(params.oauth_token, {
           oauth_token_secret: params.oauth_token_secret,
           userId: req.user.id,
           createdAt: Date.now(),
-        };
+        });
 
         res.json({
           authUrl: `${TWITTER_API}/oauth/authorize?oauth_token=${params.oauth_token}`,
@@ -219,7 +224,7 @@ module.exports = function (app) {
             .json({ error: 'oauth_token 和 oauth_verifier (PIN码) 必填' });
         }
 
-        const stored = requestTokenStore[oauth_token];
+        const stored = requestTokenStore.get(oauth_token);
         if (!stored || stored.userId !== req.user.id) {
           return res
             .status(400)
@@ -253,7 +258,7 @@ module.exports = function (app) {
             .json({ error: '获取Access Token失败', detail: text });
         }
 
-        delete requestTokenStore[oauth_token];
+        requestTokenStore.delete(oauth_token);
 
         // Encrypt tokens before saving
         const accounts = loadDB('accounts');
@@ -345,4 +350,8 @@ module.exports = function (app) {
       res.status(500).json({ error: e.message });
     }
   });
+
+  // Stop TTL sweep timer on graceful shutdown
+  process.on('SIGTERM', () => requestTokenStore.stop());
+  process.on('SIGINT', () => requestTokenStore.stop());
 };

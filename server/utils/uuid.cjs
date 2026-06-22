@@ -1,11 +1,12 @@
 /**
- * uuid.cjs — Simple UUID v4 generator
+ * uuid.cjs — UUID v4 generator using Node.js native crypto.randomUUID()
+ * Replaced custom Math.random-based implementation with crypto.randomUUID()
+ * for security (cryptographically strong random).
  */
+const crypto = require('crypto');
+
 function uuid() {
-  return 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
+  return crypto.randomUUID();
 }
 
 module.exports = { uuid };
