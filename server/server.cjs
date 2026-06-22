@@ -15,6 +15,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { WebSocketServer } = require('ws');
 
 const { loadDB, saveDB } = require('./db.cjs');
@@ -33,8 +34,37 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
   }
 });
 
-// Middleware
-app.use(cors());
+// Middleware — CORS whitelist
+const corsOrigins = new Set([
+  'https://0xainet.top',
+  'http://localhost:5288',
+]);
+// Add comma-separated origins from env var
+if (process.env.CORS_ORIGIN) {
+  process.env.CORS_ORIGIN.split(',').forEach((o) => {
+    const trimmed = o.trim();
+    if (trimmed) corsOrigins.add(trimmed);
+  });
+}
+// Add current server IPs for development convenience
+const ifaces = os.networkInterfaces();
+for (const name of Object.keys(ifaces)) {
+  for (const iface of ifaces[name]) {
+    if (iface.family === 'IPv4' && !iface.internal) {
+      corsOrigins.add(`http://${iface.address}:${PORT}`);
+    }
+  }
+}
+app.use(cors({
+  origin(origin, cb) {
+    // Allow requests with no origin (server-to-server, curl, bots)
+    if (!origin) return cb(null, true);
+    if (corsOrigins.has(origin)) return cb(null, true);
+    cb(new Error('Not allowed by CORS'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json({ limit: '50mb' }));
 // AIOPS-P0-003: /uploads 文件扩展名白名单
 app.use('/uploads', (req, res, next) => {
