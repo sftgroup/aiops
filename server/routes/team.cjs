@@ -227,7 +227,15 @@ module.exports = function (app) {
         // 删除文件
         const vUrl = task.videos[idx].videoUrl;
         if (vUrl && vUrl.startsWith('/api/file/')) {
-          const fp = path.join(DATA_DIR, vUrl.replace('/api/file/', ''));
+          const relativePath = vUrl.replace('/api/file/', '');
+          // AIOPS-P0-001: 路径遍历漏洞修复 — 拒绝含 .. 的路径
+          if (relativePath.includes('..')) {
+            return res.status(403).json({ error: '不安全的文件路径' });
+          }
+          const fp = path.resolve(DATA_DIR, relativePath);
+          if (!fp.startsWith(DATA_DIR)) {
+            return res.status(403).json({ error: '不安全的文件路径' });
+          }
           try {
             if (fs.existsSync(fp)) fs.unlinkSync(fp);
           } catch {}

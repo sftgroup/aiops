@@ -36,6 +36,18 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+// AIOPS-P0-003: /uploads 文件扩展名白名单
+app.use('/uploads', (req, res, next) => {
+  const ext = path.extname(req.path).toLowerCase();
+  const allowed = [
+    '.jpg', '.jpeg', '.png', '.gif', '.webp',
+    '.mp4', '.mov', '.avi', '.webm', '.pdf', '.svg', '.ico',
+  ];
+  if (!allowed.includes(ext)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+});
 app.use('/uploads', express.static(path.join(DATA_DIR, 'uploads')));
 
 // Serve only media files through /api/file, reject JSON/JS/etc
@@ -53,23 +65,63 @@ app.use('/api/file', (req, res, next) => {
 app.use('/api/file', express.static(DATA_DIR));
 
 // ─── WebSocket 服务 ─────────────────────────────────────
+const jwt = require('jsonwebtoken');
 const server = require('http').createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-// 存储所有连接的客户端
+// 存储所有已验证的客户端
 const wsClients = new Set();
 
 wss.on('connection', (ws) => {
-  wsClients.add(ws);
   ws.isAlive = true;
-  console.log(`[ws] Client connected (total: ${wsClients.size})`);
+  ws.isAuthenticated = false;
+  console.log('[ws] Client connected (awaiting auth)');
+
+  // AIOPS-P0-002: 未认证客户端 30 秒后断开
+  const authTimeout = setTimeout(() => {
+    if (!ws.isAuthenticated) {
+      console.log('[ws] Closing unauthenticated client');
+      ws.terminate();
+    }
+  }, 30000);
+
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw.toString());
+      if (msg.type === 'auth' && msg.token) {
+        try {
+          jwt.verify(msg.token, process.env.JWT_SECRET || '');
+          ws.isAuthenticated = true;
+          clearTimeout(authTimeout);
+          wsClients.add(ws);
+          console.log(`[ws] Client authenticated (total: ${wsClients.size})`);
+          ws.send(JSON.stringify({ type: 'auth_ok' }));
+        } catch {
+          ws.send(JSON.stringify({ type: 'auth_error', error: 'Token无效' }));
+          ws.terminate();
+        }
+        return;
+      }
+      // 未认证客户端收到非 auth 消息直接断开
+      if (!ws.isAuthenticated) {
+        ws.terminate();
+      }
+    } catch {
+      // 非法消息格式直接断开
+      if (!ws.isAuthenticated) {
+        ws.terminate();
+      }
+    }
+  });
 
   ws.on('pong', () => { ws.isAlive = true; });
   ws.on('close', () => {
+    clearTimeout(authTimeout);
     wsClients.delete(ws);
     console.log(`[ws] Client disconnected (total: ${wsClients.size})`);
   });
   ws.on('error', (e) => {
+    clearTimeout(authTimeout);
     wsClients.delete(ws);
     console.error('[ws] Error:', e.message);
   });
@@ -84,11 +136,11 @@ const heartbeatTimer = setInterval(() => {
   });
 }, 30000);
 
-// 广播函数：向所有连接推送 JSON 消息
+// 广播函数：仅向已验证的连接推送 JSON 消息
 function wsBroadcast(data) {
   const msg = JSON.stringify(data);
   for (const ws of wsClients) {
-    if (ws.readyState === 1) ws.send(msg);
+    if (ws.isAuthenticated && ws.readyState === 1) ws.send(msg);
   }
 }
 
