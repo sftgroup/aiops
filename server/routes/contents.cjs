@@ -1,9 +1,22 @@
 /**
  * contents.cjs — Content CRUD routes
+ *
+ * T-P1-006: PUT 改为白名单字段过滤，仅允许更新预设字段
  */
 const { loadDB, saveDB } = require('../db.cjs');
 const { uuid } = require('../utils/uuid.cjs');
 const { authMiddleware } = require('../middleware/auth.cjs');
+
+// T-P1-006: 允许通过 PUT 更新的白名单字段
+const ALLOWED_UPDATE_FIELDS = [
+  'title',
+  'description',
+  'text',
+  'tags',
+  'status',
+  'contentType',
+  'metadata',
+];
 
 module.exports = function (app) {
   // GET /api/contents — List user's content
@@ -33,7 +46,7 @@ module.exports = function (app) {
     res.json(content);
   });
 
-  // PUT /api/contents/:id — Update content
+  // PUT /api/contents/:id — Update content (白名单更新)
   app.put('/api/contents/:id', authMiddleware, (req, res) => {
     const contents = loadDB('contents');
     const idx = contents.findIndex(
@@ -42,10 +55,18 @@ module.exports = function (app) {
     if (idx === -1) {
       return res.status(404).json({ error: '内容不存在' });
     }
-    Object.assign(contents[idx], req.body, {
-      id: contents[idx].id,
-      userId: contents[idx].userId,
-    });
+
+    // T-P1-006: 仅从请求体中提取白名单字段
+    for (const field of ALLOWED_UPDATE_FIELDS) {
+      if (req.body[field] !== undefined) {
+        contents[idx][field] = req.body[field];
+      }
+    }
+
+    // 始终保护的核心字段，不允许客户端覆盖
+    contents[idx].id = contents[idx].id;
+    contents[idx].userId = contents[idx].userId;
+
     saveDB('contents', contents);
     res.json(contents[idx]);
   });

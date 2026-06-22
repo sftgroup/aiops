@@ -1,14 +1,47 @@
 /**
  * auth.cjs — Authentication routes (login, register, change password)
+ *
+ * T-P1-001: 添加 express-rate-limit 速率限制
+ *   - 注册: 5 次/分钟/IP
+ *   - 登录: 10 次/分钟/IP
+ *   - change-password: 5 次/分钟/IP
  */
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const { loadDB, saveDB } = require('../db.cjs');
 const { uuid } = require('../utils/uuid.cjs');
 const { authMiddleware, jwt } = require('../middleware/auth.cjs');
 
+// T-P1-001: 注册速率限制 — 5 次/分钟/IP
+const registerLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 分钟
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '注册请求过于频繁，请 1 分钟后再试' },
+});
+
+// T-P1-001: 登录速率限制 — 10 次/分钟/IP
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '登录请求过于频繁，请 1 分钟后再试' },
+});
+
+// T-P1-001: 修改密码速率限制 — 5 次/分钟/IP
+const changePasswordLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '修改密码请求过于频繁，请 1 分钟后再试' },
+});
+
 module.exports = function (app) {
   // POST /api/auth/register
-  app.post('/api/auth/register', async (req, res) => {
+  app.post('/api/auth/register', registerLimiter, async (req, res) => {
     try {
       const { username, password } = req.body;
       if (!username || !password) {
@@ -39,7 +72,7 @@ module.exports = function (app) {
   });
 
   // POST /api/auth/login
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/api/auth/login', loginLimiter, async (req, res) => {
     try {
       const { username, password } = req.body;
       const users = loadDB('users');
@@ -64,7 +97,7 @@ module.exports = function (app) {
   });
 
   // POST /api/auth/change-password
-  app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
+  app.post('/api/auth/change-password', authMiddleware, changePasswordLimiter, async (req, res) => {
     try {
       const { oldPassword, newPassword } = req.body;
       const users = loadDB('users');

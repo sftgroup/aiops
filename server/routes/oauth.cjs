@@ -7,8 +7,14 @@ const crypto = require('crypto');
 const { loadDB, saveDB } = require('../db.cjs');
 const { uuid } = require('../utils/uuid.cjs');
 const { authMiddleware } = require('../middleware/auth.cjs');
+const { encrypt } = require('../config.cjs');
+const { TTLStore } = require('../utils/ttl-store.cjs');
 
-const pkceStore = {};
+// PKCE code_verifier store with TTL (10 min default, swept every 60s)
+const pkceStore = new TTLStore({
+  ttl: 10 * 60 * 1000,    // 10 minutes
+  sweepInterval: 60 * 1000, // sweep every 60 seconds
+});
 
 const OAUTH_PROVIDERS = {
   facebook: {
@@ -117,12 +123,11 @@ module.exports = function (app) {
 
       const state = crypto.randomBytes(16).toString('hex');
       const pkce = genPKCE();
-      pkceStore[state] = {
+      pkceStore.set(state, {
         verifier: pkce.verifier,
         userId: req.user.id,
         platform: p,
-        createdAt: Date.now(),
-      };
+      });
 
       const params = new URLSearchParams();
       params.set('client_id', cid);
@@ -167,12 +172,8 @@ module.exports = function (app) {
         );
       }
 
-      const stored = pkceStore[state];
-      if (
-        !stored ||
-        stored.platform !== p ||
-        Date.now() - stored.createdAt > 600000
-      ) {
+      const stored = pkceStore.get(state);
+      if (!stored || stored.platform !== p) {
         return res.redirect(
           OAUTH_BASE_URL + '/#/accounts?oauth_error=expired'
         );
@@ -209,7 +210,7 @@ module.exports = function (app) {
       const uid = ui.id || ui.name || 'unknown';
       const uname = ui.name || ui.login || uid;
 
-      delete pkceStore[state];
+      pkceStore.delete(state);
 
       const accounts = loadDB('accounts');
       const existing = accounts.find(
@@ -219,9 +220,10 @@ module.exports = function (app) {
           a.platformUserId === uid
       );
       if (existing) {
-        existing.access_token = td.access_token;
-        existing.refresh_token =
-          td.refresh_token || existing.refresh_token;
+        existing.access_token = encrypt(td.access_token);
+        if (td.refresh_token) {
+          existing.refresh_token = encrypt(td.refresh_token);
+        }
         existing.name = uname;
         existing.updatedAt = Date.now();
       } else {
@@ -231,8 +233,8 @@ module.exports = function (app) {
           platform: p,
           platformUserId: uid,
           name: uname,
-          access_token: td.access_token,
-          refresh_token: td.refresh_token || null,
+          access_token: encrypt(td.access_token),
+          refresh_token: td.refresh_token ? encrypt(td.refresh_token) : null,
           createdAt: Date.now(),
         });
       }
@@ -246,4 +248,8 @@ module.exports = function (app) {
       );
     }
   });
+
+  // Stop TTL sweep timer on graceful shutdown
+  process.on('SIGTERM', () => pkceStore.stop());
+  process.on('SIGINT', () => pkceStore.stop());
 };
