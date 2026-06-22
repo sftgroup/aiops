@@ -125,20 +125,29 @@ async function getProjectUuid() {
 async function genVideo(subject, teamName, options = {}) {
   const { model: userModel, duration = 5, style, referenceImage, cameraMovement } = options;
   const { prompt } = buildPrompt(subject, teamName, { contentType: 'video', style, duration });
-  // 根据镜头控制模式选择模型和参数
-  let model, extraParams = [];
-  const segDuration = Math.min(Math.max(duration || 5, 3), 15);
+  // 模型选择 + 时长适配
+  let model, segDuration, extraParams = [];
+
+  // Happy Horse 1.0: 3-15s, 不支持 cameraMovement
+  // Wan 2.6: 5s/10s enum, 支持 multiClip/enableSound/1080P
+  // Hailuo 2.3 Fast: 6s/10s enum, 支持 cameraMovement(拉近/拉远/左摇/右摇/仰摄/俯摄)/1080P
+  // Seedance 1.5 Pro: 5s/10s enum, enableSound/1080P
+
   if (cameraMovement === 'auto') {
     // 自动多镜头 → Wan 2.6（多机位自动切换 + 音效 + 1080P）
     model = 'Wan 2.6';
+    segDuration = duration <= 5 ? 5 : 10;
     extraParams = ['-s', 'multiClip=1', '-s', 'enableSound=on', '-s', 'resolution=1080P'];
   } else if (cameraMovement && ['拉近','拉远','左摇','右摇','仰摄','俯摄'].includes(cameraMovement)) {
-    // 手动镜头运动 → Hailuo 2.3 Fast（更快速，支持 cameraMovement）
+    // 手动镜头运动 → Hailuo 2.3 Fast（支持 cameraMovement）
     model = 'Hailuo 2.3 Fast';
+    // Hailuo 只支持 6s 或 10s，5s 自动升到 6s
+    segDuration = duration <= 6 ? 6 : 10;
     extraParams = ['-s', 'resolution=1080P', '-s', 'cameraMovement=' + cameraMovement];
   } else {
-    // 默认：Happy Horse 1.0（快速稳定）
+    // 默认：Happy Horse 1.0（快速稳定，3-15s）
     model = userModel || 'Happy Horse 1.0';
+    segDuration = Math.min(Math.max(duration || 5, 3), 15);
   }
   console.log(`[libtv] Generating video: "${subject.slice(0, 40)}" using ${model}, ${segDuration}s${cameraMovement ? ' camera=' + cameraMovement : ''}`);
   const projectUuid = await getProjectUuid();

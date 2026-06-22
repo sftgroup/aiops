@@ -186,7 +186,8 @@ export default function VideoPage() {
               <div className="flex items-center gap-2 mb-2">
                 {[
                   { value: 5, label: '5s', desc: 'Happy Horse' },
-                  { value: 10, label: '10s', desc: 'Wan 2.6' },
+                  { value: 6, label: '6s', desc: '有镜头→Hailuo' },
+                  { value: 10, label: '10s', desc: 'Wan 2.6 / Hailuo' },
                   { value: 15, label: '15s', desc: 'Wan 2.6' },
                 ].map(opt => (
                   <button
