@@ -48,15 +48,23 @@ export default function VideoPage() {
     try {
       const t = await api(token!).get('/team-tasks/today') as TeamTask;
       if (t?.videos) {
-        // 检测是否有新完成的视频
+        // Merge backend data with local state — don't replace, so generating items stay visible
         setVideos(prev => {
+          const updated = [...prev];
           for (const v of t.videos) {
-            if (v.videoUrl && !prev.find(p => p.id === v.id)?.videoUrl) {
-              videoDoneRef.current = v.id;
-              setTimeout(() => { videoDoneRef.current = null; }, 2000);
+            const idx = updated.findIndex(p => p.id === v.id);
+            if (idx >= 0) {
+              // Check if videoUrl just became available
+              if (v.videoUrl && !updated[idx].videoUrl) {
+                videoDoneRef.current = v.id;
+                setTimeout(() => { videoDoneRef.current = null; }, 2000);
+              }
+              updated[idx] = v; // update with server data
+            } else {
+              updated.push(v);
             }
           }
-          return t.videos;
+          return updated;
         });
       }
     } catch { /* ignore */ }
@@ -78,12 +86,21 @@ export default function VideoPage() {
     if (!subject.trim()) return toast.error('请输入视频主题');
     setGenerating(true);
     setProgressMsg('连接 LibTV...');
-    setVideos(prev => prev.filter(v => v.videoUrl)); // keep only completed ones in gallery
     try {
       const d = await api(token!).post('/team-tasks/today/video', {
         subject, script, duration, cameraMovement: cameraMovement || undefined,
       });
       toast.success('📽️ 视频已提交，实时追踪中...');
+      // Add new video to list with generating status (don't filter out incomplete ones)
+      const tempVideo: VideoItem = {
+        id: d.id,
+        subject,
+        script,
+        videoUrl: '',
+        duration,
+        createdAt: new Date().toISOString(),
+      };
+      setVideos(prev => [...prev, tempVideo]);
       setProgressMsg('已提交，等待队列...');
 
       // 实时轮询 progress
@@ -408,8 +425,20 @@ export default function VideoPage() {
                   ) : (
                     <div className="w-full aspect-video bg-gradient-to-br from-dark-bg to-purple-950/20 flex items-center justify-center">
                       <div className="text-center">
-                        <Video size={36} className="mx-auto text-gray-600" />
-                        <p className="text-xs text-gray-600 mt-2">生成中...</p>
+                        <div className="w-12 h-12 mx-auto rounded-full bg-purple-500/10 flex items-center justify-center animate-pulse">
+                          <Loader2 size={22} className="text-purple-400 animate-spin" />
+                        </div>
+                        <div className="space-y-1.5 mt-3">
+                          <div className="h-2.5 w-28 bg-gray-700/50 rounded-full animate-pulse mx-auto" />
+                          <div className="h-2 w-20 bg-gray-700/30 rounded-full animate-pulse mx-auto" />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-3">
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" />
+                            AI 生成中...
+                            <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" />
+                          </span>
+                        </p>
                       </div>
                     </div>
                   )}
