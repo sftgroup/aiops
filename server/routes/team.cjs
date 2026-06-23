@@ -241,6 +241,11 @@ module.exports = function (app, ctx) {
           clonedVid.subject = clonedVid.subject || t.subject;
           clonedVid.script = clonedVid.script || '';
 
+          // Q3 fix: mark videomaker as running inside the mutator so IIFE
+          // doesn't need to re-acquire the mutex just for progress init.
+          t.progress = t.progress || {};
+          t.progress.videomaker = 'running';
+
           t.videos.push(clonedVid);
           return {
             savedTask: JSON.parse(JSON.stringify(t)),
@@ -252,18 +257,11 @@ module.exports = function (app, ctx) {
         const createdVid = savedVid;
         list = null; // don't hold stale ref
 
-        // Phase 2: Generate video in background with progress tracking
+        // Phase 2: Generate video in background with progress tracking.
+        // (Progress was already set to 'running' inside Phase 1's mutator; the
+        // IIFE no longer needs to re-acquire the mutex for progress init.)
         (async () => {
           try {
-            // Set progress to running
-            await transactTeamTasks((l) => {
-              const idx = l.findIndex((el) => el._id === task._id);
-              if (idx >= 0) {
-                l[idx].progress = l[idx].progress || {};
-                l[idx].progress.videomaker = 'running';
-              }
-            });
-
             let settings2 = loadDB('settings');
             if (Array.isArray(settings2)) settings2 = {};
             const model = (settings2 && settings2.libtv_video_model) || 'Happy Horse 1.0';
