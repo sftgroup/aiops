@@ -179,6 +179,58 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(PANEL_DIST, 'index.html'));
 });
 
+// ─── Zombie Task Recovery ─────────────────────────────────
+// On startup, tasks marked pending/running in DB have no backing process.
+// Mark them failed so users can resubmit.
+(function recoverStalledTasks() {
+  try {
+    const db = loadDB('team-tasks');
+    if (!Array.isArray(db) || db.length === 0) return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const progressKeys = ['copywriter', 'imagegen', 'videomaker', 'stitcher', 'reviewer', 'publisher'];
+    let fixedCount = 0;
+    const reason = 'Server restarted before task could complete. Please retry.';
+
+    for (const task of db) {
+      if (task.date !== today) continue;
+      const p = task.progress || {};
+      let modified = false;
+
+      for (const key of progressKeys) {
+        if (p[key] === 'pending' || p[key] === 'running') {
+          p[key] = reason;
+          modified = true;
+          fixedCount++;
+        }
+      }
+
+      // Also check full-workflow status
+      if (task.status === 'running') {
+        task.status = 'idle';
+        modified = true;
+      }
+
+      if (modified && task.userId && wsBroadcastToUser) {
+        // Notify the user that their task was interrupted
+        wsBroadcastToUser(task.userId, {
+          type: 'task_recovered',
+          taskId: task._id,
+          reason,
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    if (fixedCount > 0) {
+      saveDB('team-tasks', db);
+      console.log(`[recover] Marked ${fixedCount} stalled progress entries as failed in ${db.filter(t => t.date === today).length} today tasks`);
+    }
+  } catch (e) {
+    console.error('[recover] Recovery scan error:', e.message);
+  }
+})();
+
 // ─── Startup Checks ─────────────────────────────────────
 if (!process.env.JWT_SECRET) {
   console.error('FATAL: JWT_SECRET is not set. Set it in .env or environment variables.');
