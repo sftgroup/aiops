@@ -74,8 +74,8 @@ function selectModel({ duration = 5, cameraMovement, userModel }) {
     };
   }
 
-  // 自动多镜头 → Wan 2.6
-  if (cameraMovement === 'auto') {
+  // 长视频（>=60s）→ Wan 2.6 多镜头
+  if (duration >= 60) {
     const m = MODELS['Wan 2.6'];
     let segDuration = duration;
     if (m.durations) {
@@ -92,6 +92,18 @@ function selectModel({ duration = 5, cameraMovement, userModel }) {
         '-s', 'multiClip=1',
         '-s', 'enableSound=on',
         '-s', 'resolution=1080P',
+      ],
+    };
+  }
+
+  // 中视频（30-59s）→ Kling 3.0 智能分镜
+  if (duration >= 30) {
+    return {
+      model: 'Kling 3.0',
+      modelName: 'Kling 3.0',
+      duration,
+      params: [
+        '-s', 'smartStoryboard=true',
       ],
     };
   }
