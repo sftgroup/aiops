@@ -84,6 +84,14 @@ module.exports = function (app) {
   });
 
   // PUT /api/accounts/:id
+  // P1-004: 白名单 pick 替代 Object.assign，防止客户端覆盖 id/userId 等敏感字段
+  const ACCOUNT_UPDATEABLE_FIELDS = [
+    'name',
+    'credentials',
+    'platformUserId',
+    'screenName',
+  ];
+
   app.put('/api/accounts/:id', authMiddleware, (req, res) => {
     const accounts = loadDB('accounts');
     const idx = accounts.findIndex(
@@ -92,22 +100,30 @@ module.exports = function (app) {
     if (idx === -1) {
       return res.status(404).json({ error: '账号不存在' });
     }
-    const update = { ...req.body, id: accounts[idx].id, userId: accounts[idx].userId };
-    // Encrypt if updating Twitter OAuth tokens
-    if (
-      accounts[idx].platform === 'twitter' &&
-      update.oauth_token
-    ) {
-      update.encrypted_token = encrypt(update.oauth_token);
-      update.encrypted_token_secret = encrypt(
-        update.oauth_token_secret || ''
-      );
-      delete update.oauth_token;
-      delete update.oauth_token_secret;
+
+    const account = accounts[idx];
+
+    // 仅复制白名单字段，保护 id/userId/platform/encrypted_* 等核心字段
+    for (const field of ACCOUNT_UPDATEABLE_FIELDS) {
+      if (req.body[field] !== undefined) {
+        account[field] = req.body[field];
+      }
     }
-    Object.assign(accounts[idx], update);
+
+    // Encrypt if updating Twitter OAuth tokens (via credentials)
+    if (
+      account.platform === 'twitter' &&
+      req.body.oauth_token
+    ) {
+      account.encrypted_token = encrypt(req.body.oauth_token);
+      account.encrypted_token_secret = encrypt(
+        req.body.oauth_token_secret || ''
+      );
+      // 不保留明文 token
+    }
+
     saveDB('accounts', accounts);
-    res.json(accounts[idx]);
+    res.json(account);
   });
 
   // DELETE /api/accounts/:id

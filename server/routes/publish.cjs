@@ -75,9 +75,7 @@ module.exports = function (app) {
       }
 
       if (!targetAccounts.length) {
-      if (!targetAccounts.length) {
         return res.status(400).json({ error: '未选择有效账号' });
-      };
       }
 
       // Direct publish to bound accounts

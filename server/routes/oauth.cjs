@@ -161,6 +161,20 @@ module.exports = function (app) {
         process.env.OAUTH_BASE_URL ||
         'http://localhost:5288';
 
+      // P1-007: 校验 redirect_uri 白名单域名，防止开放重定向
+      const ALLOWED_DOMAINS = [
+        new URL(OAUTH_BASE_URL).hostname,
+        'localhost',
+      ];
+      const actualHost = req.hostname || req.get('host') || '';
+      const isAllowed = ALLOWED_DOMAINS.some(
+        (d) => actualHost === d || actualHost.endsWith('.' + d)
+      );
+      if (!isAllowed) {
+        console.error('[oauth] rejected callback from unauthorized domain:', actualHost);
+        return res.status(403).send('Unauthorized callback domain');
+      }
+
       if (err) {
         return res.redirect(
           OAUTH_BASE_URL + '/#/accounts?oauth_error=' + err

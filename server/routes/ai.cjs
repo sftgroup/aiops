@@ -162,7 +162,33 @@ ${style ? `风格：${style}` : ''}
   });
 
   // ─── AI 生成配图（队列 + WebSocket 推送） ─────────────
-  const fallbackTasks = new Map(); // 没有 WebSocket 时降级用
+  // P1-006: 持久化 fallbackTasks 到 SQLite，防止重启丢失任务状态
+  function loadImageTasks() {
+    const data = loadDB('imageTasks');
+    return Array.isArray(data) ? data : [];
+  }
+  function saveImageTasks(tasks) {
+    saveDB('imageTasks', tasks);
+  }
+  function findImageTask(taskId) {
+    const tasks = loadImageTasks();
+    return tasks.find(t => t.taskId === taskId);
+  }
+  function upsertImageTask(taskId, state) {
+    const tasks = loadImageTasks();
+    const idx = tasks.findIndex(t => t.taskId === taskId);
+    const entry = { taskId, ...state, updatedAt: Date.now() };
+    if (idx >= 0) {
+      tasks[idx] = entry;
+    } else {
+      tasks.push(entry);
+    }
+    saveImageTasks(tasks);
+  }
+  function deleteImageTask(taskId) {
+    const tasks = loadImageTasks().filter(t => t.taskId !== taskId);
+    saveImageTasks(tasks);
+  }
 
   app.post('/api/ai/image', authMiddleware, async (req, res) => {
     try {
@@ -176,8 +202,8 @@ ${style ? `风格：${style}` : ''}
         url: null, error: null, createdAt: Date.now(),
       };
 
-      // 写入状态（供 REST 降级查询）
-      fallbackTasks.set(taskId, taskState);
+      // 持久化初始状态（供 REST 降级查询 + 重启恢复）
+      upsertImageTask(taskId, taskState);
 
       // 入队
       console.log(`[ai] Image task ${taskId} enqueued (queue length: ${taskQueue.length})`);
@@ -187,12 +213,14 @@ ${style ? `风格：${style}` : ''}
         taskState.step = 'starting';
         taskState.progress = 5;
         taskState.message = '初始化...';
+        upsertImageTask(taskId, { step: 'starting', progress: 5, message: '初始化...' });
         push(taskId, requesterUserId, { step: 'starting', progress: 5, message: '初始化...' });
 
         try {
           const url = await genImage(subject, 'AI', { style }, (p) => {
-            // genImage 回调：更新状态 + 推送
+            // genImage 回调：更新状态 + 推送 + 持久化
             Object.assign(taskState, p);
+            upsertImageTask(taskId, p);
             push(taskId, requesterUserId, p);
           });
 
@@ -200,20 +228,23 @@ ${style ? `风格：${style}` : ''}
             taskState.step = 'completed';
             taskState.progress = 100;
             taskState.url = url;
+            upsertImageTask(taskId, { step: 'completed', progress: 100, url });
             push(taskId, requesterUserId, { step: 'completed', progress: 100, url });
           } else {
             taskState.step = 'failed';
             taskState.error = '配图生成超时或失败';
+            upsertImageTask(taskId, { step: 'failed', error: '配图生成超时或失败' });
             push(taskId, requesterUserId, { step: 'failed', error: '配图生成超时或失败' });
           }
         } catch (e) {
           taskState.step = 'failed';
           taskState.error = e.message;
+          upsertImageTask(taskId, { step: 'failed', error: e.message });
           push(taskId, requesterUserId, { step: 'failed', error: e.message });
         }
 
-        // 5 分钟后清理
-        setTimeout(() => fallbackTasks.delete(taskId), 300000);
+        // 5 分钟后清理（内存 + 持久化）
+        setTimeout(() => deleteImageTask(taskId), 300000);
       }).catch(() => {});
 
       res.json({ taskId });
@@ -224,7 +255,7 @@ ${style ? `风格：${style}` : ''}
 
   // ─── 配图状态查询（REST 降级，无 WebSocket 时用） ──
   app.get('/api/ai/image/status/:taskId', authMiddleware, (req, res) => {
-    const task = fallbackTasks.get(req.params.taskId);
+    const task = findImageTask(req.params.taskId);
     if (!task) return res.status(404).json({ error: '任务不存在或已过期' });
     res.json(task);
   });

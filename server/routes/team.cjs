@@ -19,9 +19,26 @@ const {
 const { Mutex } = require('async-mutex');
 const deepseek = require('../services/deepseek.cjs');
 
+// P1-008: 发布队列超时配置
+const PUBLISH_PER_ITEM_TIMEOUT_MS = 30 * 1000; // 单条发布超时 30 秒
+const PUBLISH_MAX_TOTAL_TIME_MS = 10 * 60 * 1000; // 整体队列最长 10 分钟
+
 // Global mutex for all team-task write operations.
 // Guards every load-modify-save cycle against concurrent overwrites.
 const teamTaskMutex = new Mutex();
+
+/**
+ * P1-008: 带超时的 Promise 包装
+ * 若 promise 在 timeoutMs 内未 resolve/reject，则抛出超时错误
+ */
+function withTimeout(promise, timeoutMs, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('操作超时: ' + (label || timeoutMs + 'ms'))), timeoutMs)
+    ),
+  ]);
+}
 
 /**
  * Run a mutation on team-tasks under the mutex.
@@ -1114,18 +1131,27 @@ module.exports = function (app, ctx) {
         });
 
         (async () => {
+          const publishStartTime = Date.now();
           let processedCount = 0;
           for (let qi = 0; qi < queue.length; qi++) {
+            // P1-008: 整体超时检查
+            if (Date.now() - publishStartTime > PUBLISH_MAX_TOTAL_TIME_MS) {
+              console.error('[team] publish queue timed out after %d items', qi);
+              break;
+            }
+
             const entry = queue[qi];
             let success = false;
             let errorMsg = '';
 
             try {
-              if (
-                entry.type === 'article' &&
-                entry.platform.toLowerCase() === 'twitter' &&
-                entry.account.token
-              ) {
+              // P1-008: 单条发布操作加超时，超时后抛出异常由外层 catch 统一处理
+              await withTimeout((async () => {
+                if (
+                  entry.type === 'article' &&
+                  entry.platform.toLowerCase() === 'twitter' &&
+                  entry.account.token
+                ) {
                 const crypto2 = require('crypto');
                 const OAuth2 = require('oauth-1.0a');
                 const oauth = OAuth2({
@@ -1267,8 +1293,10 @@ module.exports = function (app, ctx) {
                   entry.platform +
                   ' 尚未支持';
               }
+              })(), PUBLISH_PER_ITEM_TIMEOUT_MS, 'publish:' + entry.platform + ':' + (entry.account.screenName || ''));
             } catch (e) {
               errorMsg = e.message || 'Unknown error';
+              console.error('[team] publish timeout or error for item %d:', qi, errorMsg);
             }
 
             const pubKey =
