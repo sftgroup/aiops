@@ -266,7 +266,7 @@ export default function VideoPage() {
   // ── Stable handler: delete video ─────────────────
   const handleDeleteVideo = useCallback(async (videoId: string) => {
     try {
-      await api(token!).del('team-tasks/today/video/' + videoId);
+      await api(token!).del('/team-tasks/today/video/' + videoId);
       setVideos(prev => prev.filter(v => v.id !== videoId));
       toast.success('已删除');
     } catch (e: unknown) { toast.error(e instanceof Error ? e.message : String(e) || '删除失败'); }
