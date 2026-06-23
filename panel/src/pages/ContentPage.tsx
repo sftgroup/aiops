@@ -1,14 +1,13 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { useAuth, api } from '../AuthContext';
+import { getToken } from '../token';
+import { LS_KEY, DRAFT_KEY } from '../constants';
 import toast from 'react-hot-toast';
 import { FileText, Trash2, Loader2, Sparkles, Download, Eye } from 'lucide-react';
 import PostPreviewModal from '../components/PostPreviewModal';
 import ContentCardSkeleton from '../components/skeleton/ContentCardSkeleton';
 import { useContentStore } from '../store/contentStore';
 import type { WsTaskMessage, GenerationEntry, Content } from '../types';
-
-const LS_KEY = '***';
-const DRAFT_KEY = '***';
 
 /** WebSocket 连接地址（自动拼接） */
 function wsUrl() {
@@ -64,7 +63,7 @@ export default function ContentPage() {
         wsRef.current = ws;
 
         ws.onopen = () => {
-          const tk = localStorage.getItem('token');
+          const tk = getToken();
           if (tk) {
             ws!.send(JSON.stringify({ type: 'auth', token: tk }));
           }

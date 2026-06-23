@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { getToken as getMemToken } from '../token';
 
 // ── Types ──
 
@@ -36,7 +37,7 @@ function getWsUrl(): string {
 }
 
 function getToken(): string | null {
-  return localStorage.getItem('token');
+  return getMemToken();
 }
 
 /**

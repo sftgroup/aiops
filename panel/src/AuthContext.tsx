@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { getToken, setToken as setMemToken, clearToken } from './token';
 
 const API = '/api';
 
@@ -16,7 +17,7 @@ const AuthContext = createContext<AuthCtx>(null!);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [token, setToken] = useState<string | null>(getToken());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,7 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       fetch(`${API}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.ok ? r.json() : Promise.reject())
         .then(d => { setUser(d.user); })
-        .catch(() => { localStorage.removeItem('token'); setToken(null); setUser(null); })
+        .catch(() => { clearToken(); setToken(null); setUser(null); })
         .finally(() => setLoading(false));
     } else {
       setLoading(false);
@@ -35,7 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const r = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || '登录失败'); }
     const d = await r.json();
-    localStorage.setItem('token', d.token);
+    setMemToken(d.token);
     setToken(d.token);
     setUser(d.user);
   }, []);
@@ -44,13 +45,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const r = await fetch(`${API}/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
     if (!r.ok) { const e = await r.json(); throw new Error(e.error || '注册失败'); }
     const d = await r.json();
-    localStorage.setItem('token', d.token);
+    setMemToken(d.token);
     setToken(d.token);
     setUser(d.user);
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('token');
+    clearToken();
     setToken(null);
     setUser(null);
   }, []);

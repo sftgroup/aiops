@@ -705,10 +705,19 @@ module.exports = function (app, ctx) {
               for (let si = 0; si < videos.length; si++) {
                 const vu = videos[si].videoUrl;
                 if (vu && vu.startsWith('/api/file/')) {
-                  const fp = path.join(
-                    DATA_DIR,
-                    vu.replace('/api/file/', '')
-                  );
+                  const rel = vu.replace('/api/file/', '');
+                  // P0 security: prevent path traversal (e.g. /api/file/../../../etc/passwd)
+                  if (rel.includes('..') || path.isAbsolute(rel)) {
+                    console.error('[team] stitcher: rejected path traversal attempt:', vu);
+                    continue;
+                  }
+                  const fp = path.join(DATA_DIR, rel);
+                  const resolved = path.resolve(fp);
+                  const dataRoot = path.resolve(DATA_DIR);
+                  if (!resolved.startsWith(dataRoot + path.sep)) {
+                    console.error('[team] stitcher: resolved path escapes DATA_DIR:', vu);
+                    continue;
+                  }
                   if (fs.existsSync(fp)) {
                     const upName =
                       'clip_' +
@@ -1150,13 +1159,15 @@ module.exports = function (app, ctx) {
                 if (entry.imageUrl) {
                   const imageFilePath =
                     entry.imageUrl.startsWith('/api/file/')
-                      ? path.join(
-                          DATA_DIR,
-                          entry.imageUrl.replace(
-                            '/api/file/',
-                            ''
-                          )
-                        )
+                      ? (() => {
+                          const rel = entry.imageUrl.replace('/api/file/', '');
+                          if (rel.includes('..') || path.isAbsolute(rel)) return '';
+                          const fp = path.join(DATA_DIR, rel);
+                          const resolved = path.resolve(fp);
+                          const dataRoot = path.resolve(DATA_DIR);
+                          if (!resolved.startsWith(dataRoot + path.sep)) return '';
+                          return fp;
+                        })()
                       : '';
                   if (
                     imageFilePath &&
