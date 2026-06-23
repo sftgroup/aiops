@@ -12,6 +12,15 @@ const { loadDB, saveDB } = require('../db.cjs');
 const { uuid } = require('../utils/uuid.cjs');
 const { authMiddleware, jwt } = require('../middleware/auth.cjs');
 
+// P0 security: refuse to issue tokens if JWT_SECRET is not configured
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is required');
+  }
+  return secret;
+}
+
 // T-P1-001: 注册速率限制 — 5 次/分钟/IP
 const registerLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 分钟
@@ -62,7 +71,7 @@ module.exports = function (app) {
       saveDB('users', users);
       const token = jwt.sign(
         { id: user.id, username: user.username },
-        process.env.JWT_SECRET || '',
+        getJwtSecret(),
         { expiresIn: '30d' }
       );
       res.json({ token, user: { id: user.id, username: user.username } });
@@ -82,7 +91,7 @@ module.exports = function (app) {
       }
       const token = jwt.sign(
         { id: user.id, username: user.username },
-        process.env.JWT_SECRET || '',
+        getJwtSecret(),
         { expiresIn: '30d' }
       );
       res.json({ token, user: { id: user.id, username: user.username } });
