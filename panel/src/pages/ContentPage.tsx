@@ -38,7 +38,12 @@ export default function ContentPage() {
         wsRef.current = ws;
 
         ws.onopen = () => {
-          // 如果有进行中的任务，重新订阅
+          // 1) 先发送 auth 认证，让服务端绑定 ws.userId
+          const tk = localStorage.getItem('token');
+          if (tk) {
+            ws!.send(JSON.stringify({ type: 'auth', token: tk }));
+          }
+          // 2) 如果有进行中的任务，重新订阅
           if (pendingTaskId.current) {
             ws!.send(JSON.stringify({ type: 'subscribe', taskId: pendingTaskId.current }));
           }

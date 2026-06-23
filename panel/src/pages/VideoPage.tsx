@@ -47,8 +47,13 @@ export default function VideoPage() {
   const [wsFallback, setWsFallback] = useState(false);
   const wsActiveTaskRef = useRef<string | null>(null);
 
-  // WebSocket setup
+  // WebSocket setup — dynamic URL matching ContentPage pattern
+  const wsUrl = () => {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${window.location.host}/ws`;
+  };
   const ws = useWebSocket({
+    wsUrl: wsUrl(),
     onProgress(data) {
       // Handle team_progress messages
       if (data.taskId === wsActiveTaskRef.current) {

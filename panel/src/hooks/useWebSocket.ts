@@ -3,6 +3,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 // ── Types ──
 
 export interface UseWebSocketOptions {
+  wsUrl?: string;
   onProgress?: (data: { taskId: string; step: string; status: string }) => void;
   onVideoReady?: (data: { taskId: string; videoId: string; videoUrl: string }) => void;
   onAuthError?: () => void;
@@ -53,7 +54,7 @@ function getToken(): string | null {
  *  - visibilitychange → visible: reconnect immediately if disconnected
  */
 export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketReturn {
-  const { onProgress, onVideoReady, onAuthError, onConnectionChange } = options;
+  const { wsUrl: customWsUrl, onProgress, onVideoReady, onAuthError, onConnectionChange } = options;
 
   const [readyState, setReadyState] = useState<number>(WebSocket.CONNECTING);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -103,9 +104,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     }
     setReadyState(WebSocket.CONNECTING);
     setConnectionError(null);
-    const url = getWsUrl();
+    const url = customWsUrl || getWsUrl();
     return new WebSocket(url);
-  }, []);
+  }, [customWsUrl]);
 
   // ── WebSocket event handlers (shared between initial connect and reconnect) ──
 
