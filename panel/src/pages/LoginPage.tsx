@@ -23,8 +23,8 @@ export default function LoginPage() {
         toast.success('登录成功');
       }
       navigate('/');
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -42,6 +42,7 @@ export default function LoginPage() {
           <input
             className="w-full px-3 py-2.5 bg-dark-bg border border-dark-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-accent-primary"
             placeholder="用户名"
+            aria-label="用户名"
             value={username}
             onChange={e => setUsername(e.target.value)}
             required
@@ -50,6 +51,7 @@ export default function LoginPage() {
             type="password"
             className="w-full px-3 py-2.5 bg-dark-bg border border-dark-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-accent-primary"
             placeholder="密码"
+            aria-label="密码"
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
@@ -58,6 +60,7 @@ export default function LoginPage() {
             type="submit"
             disabled={loading}
             className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 rounded-lg font-medium transition-colors disabled:opacity-50"
+            aria-label={loading ? '处理中' : isRegister ? '注册' : '登录'}
           >
             {loading ? '处理中...' : isRegister ? '注册' : '登录'}
           </button>
@@ -65,6 +68,7 @@ export default function LoginPage() {
             type="button"
             onClick={() => setIsRegister(!isRegister)}
             className="w-full text-sm text-gray-500 hover:text-accent-primary transition-colors"
+            aria-label={isRegister ? '已有账号？去登录' : '没有账号？去注册'}
           >
             {isRegister ? '已有账号？去登录' : '没有账号？去注册'}
           </button>

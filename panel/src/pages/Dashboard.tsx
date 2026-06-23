@@ -3,21 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, api } from '../AuthContext';
 import { LayoutDashboard, Video, FileText, Send, Globe, Users, X, Loader2, CheckCircle2, Trash2, LogOut, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-interface Stats {
-  totalVideos: number; totalTexts: number; published: number;
-  pendingPublish: number; accounts: number; platforms: string[];
-}
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import type { Account, Stats } from '../types';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { token } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [tweetTexts, setTweetTexts] = useState<Record<string, string>>({});
   const [postingId, setPostingId] = useState<string | null>(null);
   const [postResult, setPostResult] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
 
   const load = async () => {
     if (!token) return;
@@ -51,21 +49,27 @@ export default function Dashboard() {
         setPostResult(`❌ 发送失败: ${JSON.stringify(resp.data || resp)}`);
         toast.error('发送失败');
       }
-    } catch (e: any) {
-      setPostResult(`❌ 发送失败: ${e.message}`);
+    } catch (e: unknown) {
+      setPostResult(`❌ 发送失败: ${e instanceof Error ? e.message : String(e)}`);
       toast.error('发送失败');
     } finally { setPostingId(null); }
   };
 
   // Unbind account
   const handleUnbind = async (id: string, screenName: string) => {
-    if (!confirm(`确定解除绑定 @${screenName}？`)) return;
+    setConfirmDelete({ id, name: screenName });
+  };
+
+  const confirmUnbind = async () => {
+    if (!confirmDelete) return;
+    const { id, name } = confirmDelete;
+    setConfirmDelete(null);
     try {
       await api(token!).del('/accounts/' + id);
-      toast.success(`已解除 @${screenName}`);
+      toast.success(`已解除 @${name}`);
       load();
-    } catch (e: any) {
-      toast.error(e.message || '解除绑定失败');
+    } catch (e: unknown) {
+      toast.error((e instanceof Error ? e.message : String(e)) || '解除绑定失败');
     }
   };
 
@@ -245,6 +249,16 @@ export default function Dashboard() {
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="解除账号绑定"
+        message={`确定解除绑定 @${confirmDelete?.name}？解除后将无法通过此账号发布内容。`}
+        confirmLabel="解除绑定"
+        variant="danger"
+        onConfirm={confirmUnbind}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }

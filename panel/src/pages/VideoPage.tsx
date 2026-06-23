@@ -1,24 +1,23 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth, api } from '../AuthContext';
 import { useWebSocket } from '../hooks/useWebSocket';
 import toast from 'react-hot-toast';
-import {
-  Loader2, Sparkles, Video, Play, Clock, Timer,
-  FileText, Trash2, Download, CheckCircle2
-} from 'lucide-react';
-import PublishSection from '../components/PublishSection';
+import { Video } from 'lucide-react';
+import VideoCard from '../components/video/VideoCard';
+import VideoCardSkeleton from '../components/skeleton/VideoCardSkeleton';
+import VideoSubjectForm from '../components/video/VideoSubjectForm';
+import VideoScriptCard from '../components/video/VideoScriptCard';
+import VideoErrorBanner from '../components/video/VideoErrorBanner';
+import VideoGeneratePanel from '../components/video/VideoGeneratePanel';
+import KeyboardShortcutsHelp from '../components/KeyboardShortcutsHelp';
+import { useVideoStore } from '../store/videoStore';
+import type { VideoItem } from '../store/videoStore';
 
-interface VideoItem {
-  id: string;
-  subject: string;
-  script: string;
-  videoUrl: string;
-  duration: number;
-  createdAt: string;
-}
+// Lazy-load the video player modal
+const VideoPlayerModal = React.lazy(() => import('../components/video/VideoPlayerModal'));
 
 interface TeamTask {
-  videos: VideoItem[];
+  videos: import('../store/videoStore').VideoItem[];
   progress?: {
     videomaker?: string;
     errorMessage?: string;
@@ -28,34 +27,55 @@ interface TeamTask {
 
 export default function VideoPage() {
   const { token } = useAuth();
-  const [subject, setSubject] = useState('');
-  const [script, setScript] = useState('');
-  const [duration, setDuration] = useState(5);
-  const [cameraMovement, setCameraMovement] = useState('');
-  const [customDuration, setCustomDuration] = useState('');
-  const [showCustomDuration, setShowCustomDuration] = useState(false);
-  const [generatingScript, setGeneratingScript] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [progressMsg, setProgressMsg] = useState('');
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [videos, setVideos] = useState<VideoItem[]>([]);
-  const [loadingVideos, setLoadingVideos] = useState(true);
+
+  // ── Form state from store ──────────────────────────
+  const subject = useVideoStore((s) => s.subject);
+  const setSubject = useVideoStore((s) => s.setSubject);
+  const script = useVideoStore((s) => s.script);
+  const setScript = useVideoStore((s) => s.setScript);
+  const duration = useVideoStore((s) => s.duration);
+  const setDuration = useVideoStore((s) => s.setDuration);
+  const cameraMovement = useVideoStore((s) => s.cameraMovement);
+  const setCameraMovement = useVideoStore((s) => s.setCameraMovement);
+  const customDuration = useVideoStore((s) => s.customDuration);
+  const setCustomDuration = useVideoStore((s) => s.setCustomDuration);
+  const showCustomDuration = useVideoStore((s) => s.showCustomDuration);
+  const setShowCustomDuration = useVideoStore((s) => s.setShowCustomDuration);
+
+  // ── Generation / progress state from store ────────
+  const generatingScript = useVideoStore((s) => s.generatingScript);
+  const setGeneratingScript = useVideoStore((s) => s.setGeneratingScript);
+  const generating = useVideoStore((s) => s.generating);
+  const setGenerating = useVideoStore((s) => s.setGenerating);
+  const progressMsg = useVideoStore((s) => s.progressMsg);
+  const setProgressMsg = useVideoStore((s) => s.setProgressMsg);
+  const errorMsg = useVideoStore((s) => s.errorMsg);
+  const setErrorMsg = useVideoStore((s) => s.setErrorMsg);
+  const videos = useVideoStore((s) => s.videos);
+  const setVideos = useVideoStore((s) => s.setVideos);
+  const loadingVideos = useVideoStore((s) => s.loadingVideos);
+  const setLoadingVideos = useVideoStore((s) => s.setLoadingVideos);
+  const wsFallback = useVideoStore((s) => s.wsFallback);
+  const setWsFallback = useVideoStore((s) => s.setWsFallback);
+
+  // ── Video player modal state ──────────────────────
+  const [playingVideo, setPlayingVideo] = React.useState<VideoItem | null>(null);
+  const [helpOpen, setHelpOpen] = React.useState(false);
+
   const pollRef = useRef<number | null>(null);
   const videoDoneRef = useRef<string | null>(null);
-  const timeoutRef = useRef<number | null>(null);       // stores the 10min timeout
-  const abortRef = useRef<AbortController | null>(null); // cancels in-flight fetch on unmount
-  const [wsFallback, setWsFallback] = useState(false);
+  const timeoutRef = useRef<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const wsActiveTaskRef = useRef<string | null>(null);
 
-  // WebSocket setup — dynamic URL matching ContentPage pattern
-  const wsUrl = () => {
+  // WebSocket setup
+  const wsUrl = useCallback(() => {
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${proto}//${window.location.host}/ws`;
-  };
+  }, []);
   const ws = useWebSocket({
     wsUrl: wsUrl(),
     onProgress(data) {
-      // Handle team_progress messages
       if (data.taskId === wsActiveTaskRef.current) {
         if (data.status === 'running') {
           const stepLabels = ['准备素材...', '生成视频片段...', '合成最终视频...', '即将完成...'];
@@ -87,8 +107,12 @@ export default function VideoPage() {
     },
   });
 
+  const clearPollAndTimeout = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+  }, []);
+
   const loadVideos = useCallback(async () => {
-    // Cancel any previous in-flight request (e.g. if called while another is pending)
     abortRef.current?.abort();
     const abort = new AbortController();
     abortRef.current = abort;
@@ -96,23 +120,20 @@ export default function VideoPage() {
     try {
       const t = await api(token!).get('/team-tasks/today', abort.signal) as TeamTask;
       if (t?.videos) {
-        // Check if any video-maker is in error state (persistent error display)
         if (t.progress?.videomaker === 'error' && !generating) {
           setErrorMsg(t.progress?.errorMessage || '视频生成失败，请重试');
         }
 
-        // Merge backend data with local state — don't replace, so generating items stay visible
         setVideos(prev => {
           const updated = [...prev];
           for (const v of t.videos) {
             const idx = updated.findIndex(p => p.id === v.id);
             if (idx >= 0) {
-              // Check if videoUrl just became available
               if (v.videoUrl && !updated[idx].videoUrl) {
                 videoDoneRef.current = v.id;
                 setTimeout(() => { videoDoneRef.current = null; }, 2000);
               }
-              updated[idx] = v; // update with server data
+              updated[idx] = v;
             } else {
               updated.push(v);
             }
@@ -120,18 +141,12 @@ export default function VideoPage() {
           return updated;
         });
       }
-    } catch (e: any) {
-      if (e.name === 'AbortError') return; // component unmounted, skip setState
+    } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === 'AbortError') return;
       /* ignore */
     }
     setLoadingVideos(false);
-  }, [token]);
-
-  // Helper: clear polling + timeout
-  const clearPollAndTimeout = useCallback(() => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
-  }, []);
+  }, [token, generating, setVideos, setErrorMsg, setLoadingVideos]);
 
   useEffect(() => {
     loadVideos();
@@ -141,18 +156,20 @@ export default function VideoPage() {
     };
   }, [token, loadVideos, clearPollAndTimeout]);
 
-  const handleGenerateScript = async () => {
+  // ── Stable handler: generate script ──────────────
+  const handleGenerateScript = useCallback(async () => {
     if (!subject.trim()) return toast.error('请输入视频主题');
     setGeneratingScript(true);
     try {
       const d = await api(token!).post('/videos/scripts', { subject, duration });
       setScript(d.script);
       toast.success('文案生成成功');
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : String(e)); }
     finally { setGeneratingScript(false); }
-  };
+  }, [subject, token, duration, setScript, setGeneratingScript]);
 
-  const handleGenerateVideo = async () => {
+  // ── Stable handler: generate video ───────────────
+  const handleGenerateVideo = useCallback(async () => {
     if (!subject.trim()) return toast.error('请输入视频主题');
     setGenerating(true);
     setProgressMsg('连接 LibTV...');
@@ -161,40 +178,28 @@ export default function VideoPage() {
         subject, script, duration, cameraMovement: cameraMovement || undefined,
       });
       toast.success('📽️ 视频已提交，实时追踪中...');
-      // Add new video to list with generating status (don't filter out incomplete ones)
       const tempVideo: VideoItem = {
-        id: d.id,
-        subject,
-        script,
-        videoUrl: '',
-        duration,
-        createdAt: new Date().toISOString(),
+        id: d.id, subject, script, videoUrl: '', duration, createdAt: new Date().toISOString(),
       };
       setVideos(prev => [...prev, tempVideo]);
       setProgressMsg('已提交，等待队列...');
 
-      // Register this task for WS events
       wsActiveTaskRef.current = d.id;
 
-      // 实时轮询 progress (fallback when WS not available)
       let stepTimer = 0;
       const steps = ['准备素材...', '生成视频片段...', '合成最终视频...', '即将完成...'];
 
       if (pollRef.current) clearInterval(pollRef.current);
-      // Only start polling if WS is not connected, or as safety backup
       pollRef.current = window.setInterval(async () => {
-        // Cancel previous polling fetch before starting a new one
         abortRef.current?.abort();
         const pollAbort = new AbortController();
         abortRef.current = pollAbort;
 
-        // If WS is connected, skip polling (rely on WS events)
         if (ws.isAuthenticated) return;
 
         try {
           const t = await api(token!).get('/team-tasks/today', pollAbort.signal) as TeamTask;
-          
-          // 更新进度
+
           const prog = t.progress?.videomaker;
           if (prog === 'running') {
             stepTimer = Math.min(stepTimer + 1, steps.length - 1);
@@ -214,28 +219,26 @@ export default function VideoPage() {
             return;
           }
 
-          // 检测视频完成
-          const vid = t?.videos?.find((v: any) => v.id === d.id);
+          const vid = t?.videos?.find((v: VideoItem) => v.id === d.id);
           if (vid?.videoUrl) {
             clearInterval(pollRef.current!);
             pollRef.current = null;
-            if (timeoutRef.current) { // cancel the 10min guard since we're done
+            if (timeoutRef.current) {
               clearTimeout(timeoutRef.current);
               timeoutRef.current = null;
             }
             wsActiveTaskRef.current = null;
-            loadVideos(); // 刷新全列表
+            loadVideos();
             setProgressMsg('');
             setGenerating(false);
             toast.success('🎬 视频生成完成！');
             return;
           }
-        } catch (e: any) {
-          if (e.name === 'AbortError') return; // component unmounted
+        } catch (e2: unknown) {
+          if (e2 instanceof DOMException && e2.name === 'AbortError') return;
         }
       }, 4000);
 
-      // 超时保护（10分钟）— stored in ref so cleanup can clear it
       timeoutRef.current = window.setTimeout(() => {
         if (pollRef.current) {
           clearInterval(pollRef.current);
@@ -247,282 +250,126 @@ export default function VideoPage() {
         toast.error('生成超时，请重试');
       }, 600000);
 
-    } catch (e: any) { toast.error(e.message); setGenerating(false); }
-  };
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : String(e)); setGenerating(false); }
+  }, [subject, script, duration, cameraMovement, token, setVideos, setGenerating, setProgressMsg, setErrorMsg, loadVideos, ws.isAuthenticated]);
 
-  const handleRetryVideo = () => {
+  // ── Stable handler: retry / dismiss errors ───────
+  const handleRetryVideo = useCallback(() => {
     setErrorMsg(null);
     handleGenerateVideo();
-  };
+  }, [setErrorMsg, handleGenerateVideo]);
 
-  const handleDismissError = () => {
+  const handleDismissError = useCallback(() => {
     setErrorMsg(null);
-  };
+  }, [setErrorMsg]);
 
-  const handleDeleteVideo = async (videoId: string) => {
+  // ── Stable handler: delete video ─────────────────
+  const handleDeleteVideo = useCallback(async (videoId: string) => {
     try {
       await api(token!).del('team-tasks/today/video/' + videoId);
       setVideos(prev => prev.filter(v => v.id !== videoId));
       toast.success('已删除');
-    } catch (e: any) { toast.error(e.message || '删除失败'); }
-  };
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : String(e) || '删除失败'); }
+  }, [token, setVideos]);
 
-  if (loadingVideos) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 size={28} className="animate-spin text-gray-500" />
-          <span className="text-sm text-gray-500">加载中...</span>
-        </div>
-      </div>
-    );
-  }
+  // ── Stable handler: play video ───────────────────
+  const handlePlay = useCallback((v: VideoItem) => {
+    if (v.videoUrl) setPlayingVideo(v);
+  }, []);
+
+  // ── Stable handler: download video ──────────────
+  const handleDownload = useCallback((v: VideoItem) => {
+    window.open(v.videoUrl, '_blank');
+  }, []);
+
+  // ── Stable handler: close player ───────────────
+  const handleClosePlayer = useCallback(() => {
+    setPlayingVideo(null);
+  }, []);
+
+  // ── Stable handler: close help ─────────────────
+  const handleCloseHelp = useCallback(() => {
+    setHelpOpen(false);
+  }, []);
+
+  // ── Derived: video count text (useMemo) ──────────
+  const videoCountText = useMemo(() => `${videos.length} 条`, [videos.length]);
+
+  // ── Global keyboard shortcuts ──────────────────
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const tag = target.tagName.toLowerCase();
+      if (['input', 'textarea', 'select'].includes(tag) || target.isContentEditable) return;
+
+      if (helpOpen || playingVideo) return;
+
+      const key = e.key.toLowerCase();
+
+      if (key === '?' || (key === '/' && e.shiftKey)) {
+        e.preventDefault();
+        setHelpOpen(true);
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && key === 'k') {
+        e.preventDefault();
+        const el = document.querySelector<HTMLInputElement>('[data-search-input]');
+        el?.focus();
+        return;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [helpOpen, playingVideo]);
 
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">🎬 视频制作</h2>
+      <div className="mb-5 sm:mb-6">
+        <h2 className="text-xl sm:text-2xl font-bold">🎬 视频制作</h2>
         <p className="text-sm text-gray-500 mt-1">输入主题，AI 自动生成脚本和视频，一键发布到社交媒体</p>
       </div>
 
       <div className="space-y-4 mb-8">
-        {/* Subject Card */}
-        <div className="bg-dark-card rounded-xl border border-dark-border overflow-hidden">
-          <div className="px-5 py-4 border-b border-dark-border flex items-center gap-2">
-            <span className="w-7 h-7 rounded-lg bg-purple-500/20 flex items-center justify-center">
-              <span className="text-xs">🎯</span>
-            </span>
-            <h3 className="font-semibold">视频主题</h3>
-          </div>
-          <div className="p-5 space-y-4">
-            <input
-              className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-xl text-white focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
-              value={subject}
-              onChange={e => setSubject(e.target.value)}
-              placeholder="例如：AI 改变生活、未来科技展望…"
-              disabled={generating}
-            />
+        <VideoSubjectForm
+          subject={subject}
+          setSubject={setSubject}
+          duration={duration}
+          setDuration={setDuration}
+          customDuration={customDuration}
+          setCustomDuration={setCustomDuration}
+          showCustomDuration={showCustomDuration}
+          setShowCustomDuration={setShowCustomDuration}
+          cameraMovement={cameraMovement}
+          setCameraMovement={setCameraMovement}
+          generating={generating}
+        />
 
-            {/* Duration Selector */}
-            <div>
-              <label className="flex items-center gap-1.5 text-sm text-gray-400 mb-2.5">
-                <Timer size={14} />
-                视频时长
-              </label>
-              <div className="flex items-center gap-2 mb-2">
-                {[
-                  { value: 5, label: '5s', desc: 'Happy Horse' },
-                  { value: 6, label: '6s', desc: '有镜头→Hailuo' },
-                  { value: 10, label: '10s', desc: 'Wan 2.6 / Hailuo' },
-                  { value: 15, label: '15s', desc: 'Wan 2.6' },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => { setDuration(opt.value); setShowCustomDuration(false); setCustomDuration(''); }}
-                    disabled={generating}
-                    className={`relative flex-1 px-4 py-2.5 rounded-xl text-xs font-medium border transition-all ${
-                      duration === opt.value && !showCustomDuration
-                        ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 shadow-sm'
-                        : 'bg-dark-bg border-dark-border text-gray-400 hover:border-gray-600 hover:text-gray-300'
-                    } disabled:opacity-50`}
-                  >
-                    <span className="block">{opt.label}</span>
-                    <span className={`block mt-0.5 text-[10px] ${
-                      duration === opt.value && !showCustomDuration ? 'text-purple-400/60' : 'text-gray-600'
-                    }`}>
-                      {opt.desc}
-                    </span>
-                  </button>
-                ))}
-                {/* Custom Button */}
-                <button
-                  onClick={() => { setShowCustomDuration(true); setDuration(0); }}
-                  disabled={generating}
-                  className={`relative flex-1 px-3 py-2.5 rounded-xl text-xs font-medium border transition-all ${
-                    showCustomDuration
-                      ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 shadow-sm'
-                      : 'bg-dark-bg border-dark-border text-gray-400 hover:border-gray-600 hover:text-gray-300'
-                  } disabled:opacity-50`}
-                >
-                  <span className="block">自定义</span>
-                </button>
-              </div>
-              {showCustomDuration && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    max="300"
-                    value={customDuration}
-                    onChange={e => {
-                      setCustomDuration(e.target.value);
-                      const v = parseInt(e.target.value);
-                      if (v > 0 && v <= 300) setDuration(v);
-                    }}
-                    placeholder="3~300秒"
-                    disabled={generating}
-                    className="flex-1 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-white text-xs focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
-                  />
-                  <span className="text-xs text-gray-500">秒</span>
-                </div>
-              )}
-            </div>
+        <VideoScriptCard
+          script={script}
+          setScript={setScript}
+          generatingScript={generatingScript}
+          generating={generating}
+          subject={subject}
+          onGenerateScript={handleGenerateScript}
+        />
 
-            {/* Camera Movement Selector */}
-            <div>
-              <label className="flex items-center gap-1.5 text-sm text-gray-400 mb-2.5">
-                <span>🎥</span>
-                镜头运动
-              </label>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {[
-                  { value: '', label: '默认', desc: 'Happy Horse' },
-                  { value: 'auto', label: '✨ 自动多镜头', desc: 'Wan 2.6' },
-                  { value: '拉近', label: '拉近', desc: 'Hailuo' },
-                  { value: '拉远', label: '拉远', desc: 'Hailuo' },
-                  { value: '左摇', label: '左摇', desc: 'Hailuo' },
-                  { value: '右摇', label: '右摇', desc: 'Hailuo' },
-                  { value: '仰摄', label: '仰摄', desc: 'Hailuo' },
-                  { value: '俯摄', label: '俯摄', desc: 'Hailuo' },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setCameraMovement(opt.value)}
-                    disabled={generating}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                      cameraMovement === opt.value
-                        ? 'bg-blue-500/20 border-blue-500/50 text-blue-300'
-                        : 'bg-dark-bg border-dark-border text-gray-400 hover:border-gray-600 hover:text-gray-300'
-                    } disabled:opacity-50`}
-                  >
-                    {opt.label}
-                    {opt.desc && (
-                      <span className={`ml-1 text-[9px] ${
-                        cameraMovement === opt.value ? 'text-blue-400/50' : 'text-gray-600'
-                      }`}>
-                        {opt.desc}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Script Card */}
-        <div className="bg-dark-card rounded-xl border border-dark-border overflow-hidden">
-          <div className="px-5 py-4 border-b border-dark-border flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-7 h-7 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                <FileText size={14} className="text-blue-400" />
-              </span>
-              <h3 className="font-semibold">视频文案 / 提示词</h3>
-            </div>
-            <button
-              onClick={handleGenerateScript}
-              disabled={generatingScript || !subject.trim()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-all disabled:opacity-40"
-            >
-              {generatingScript ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-              {generatingScript ? '生成中...' : 'AI 生成文案'}
-            </button>
-          </div>
-          <div className="p-5">
-            <textarea
-              className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-xl text-white focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all h-36 resize-none text-sm leading-relaxed placeholder:text-gray-600"
-              value={script}
-              onChange={e => setScript(e.target.value)}
-              placeholder="AI 自动生成或手动输入提示词。LibTV 会根据文案生成匹配视频..."
-              disabled={generating}
-            />
-            <div className="flex items-center justify-between mt-2">
-              <span className="text-xs text-gray-600">
-                {script.length > 0 ? `${script.length} 字` : ''}
-              </span>
-              {script && (
-                <button
-                  onClick={() => setScript('')}
-                  className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-                >
-                  清空
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Error Banner */}
         {errorMsg && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 space-y-3">
-            <div className="flex items-start gap-3">
-              <span className="text-red-400 text-lg leading-none mt-0.5">⚠️</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-red-300">生成失败</p>
-                <p className="text-xs text-red-400/80 mt-1 break-words">{errorMsg}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleRetryVideo}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-red-500/20 text-red-300 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-all"
-              >
-                <span>↻</span> 重试
-              </button>
-              <button
-                onClick={handleDismissError}
-                className="px-3 py-2 text-xs font-medium text-gray-400 border border-dark-border rounded-lg hover:text-gray-300 hover:bg-dark-bg transition-all"
-              >
-                关闭
-              </button>
-            </div>
-          </div>
+          <VideoErrorBanner
+            errorMsg={errorMsg}
+            onRetry={handleRetryVideo}
+            onDismiss={handleDismissError}
+          />
         )}
 
-        {/* WS fallback banner */}
-        {wsFallback && generating && (
-          <div className="flex items-center gap-2 px-3 py-1.5 mb-2 text-xs text-yellow-400 bg-yellow-500/5 border border-yellow-500/20 rounded-lg">
-            <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
-            实时推送不可用，已切换轮询模式
-          </div>
-        )}
-
-        {/* Generate Button & Progress */}
-        <button
-          onClick={handleGenerateVideo}
-          disabled={generating || !subject.trim()}
-          className="flex items-center justify-center gap-2 w-full py-3.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded-xl font-medium transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-purple-900/30"
-        >
-          {generating ? (
-            <Loader2 size={18} className="animate-spin" />
-          ) : (
-            <Play size={18} />
-          )}
-          {generating ? '生成中...' : '🎬 LibTV 生成视频'}
-        </button>
-
-        {/* Real-time Progress */}
-        {generating && (
-          <div className="bg-dark-card rounded-xl border border-dark-border p-5 space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-purple-500/20 flex items-center justify-center">
-                <Loader2 size={16} className="animate-spin text-purple-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-200">
-                    {progressMsg}
-                  </span>
-                </div>
-                <div className="w-full h-2 bg-dark-bg rounded-full overflow-hidden mt-2">
-                  <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500 animate-pulse" style={{ width: '35%' }} />
-                </div>
-                <p className="text-xs text-gray-600 mt-1">通常 30 秒~2 分钟完成，请勿关闭页面</p>
-              </div>
-            </div>
-          </div>
-        )}
+        <VideoGeneratePanel
+          generating={generating}
+          wsFallback={wsFallback}
+          subject={subject}
+          progressMsg={progressMsg}
+          onGenerate={handleGenerateVideo}
+        />
       </div>
 
       {/* Video Gallery */}
@@ -534,10 +381,12 @@ export default function VideoPage() {
             </span>
             已生成的视频
           </h3>
-          <span className="text-xs text-gray-500">{videos.length} 条</span>
+          <span className="text-xs text-gray-500">{videoCountText}</span>
         </div>
 
-        {videos.length === 0 ? (
+        {loadingVideos ? (
+          <VideoCardSkeleton count={8} />
+        ) : videos.length === 0 ? (
           <div className="text-center py-16 bg-dark-card rounded-xl border border-dark-border">
             <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mx-auto mb-4">
               <span className="text-3xl">🎬</span>
@@ -548,113 +397,37 @@ export default function VideoPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 animate-fade-in">
             {videos.map(vid => (
-              <div
+              <VideoCard
                 key={vid.id}
-                className={`group bg-dark-card rounded-xl border overflow-hidden transition-all hover:shadow-lg hover:shadow-purple-900/10 ${
-                  videoDoneRef.current === vid.id
-                    ? 'border-green-500/50 ring-1 ring-green-500/20'
-                    : 'border-dark-border'
-                }`}
-              >
-                {/* Video player */}
-                <div className="relative">
-                  {vid.videoUrl ? (
-                    <video
-                      src={vid.videoUrl}
-                      controls
-                      className="w-full aspect-video bg-black object-cover"
-                      preload="metadata"
-                    />
-                  ) : (
-                    <div className="w-full aspect-video bg-gradient-to-br from-dark-bg to-purple-950/20 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="w-12 h-12 mx-auto rounded-full bg-purple-500/10 flex items-center justify-center animate-pulse">
-                          <Loader2 size={22} className="text-purple-400 animate-spin" />
-                        </div>
-                        <div className="space-y-1.5 mt-3">
-                          <div className="h-2.5 w-28 bg-gray-700/50 rounded-full animate-pulse mx-auto" />
-                          <div className="h-2 w-20 bg-gray-700/30 rounded-full animate-pulse mx-auto" />
-                        </div>
-                        <p className="text-xs text-gray-500 mt-3">
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" />
-                            AI 生成中...
-                            <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" />
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {videoDoneRef.current === vid.id && (
-                    <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1 shadow-lg">
-                      <CheckCircle2 size={10} />
-                      新完成
-                    </div>
-                  )}
-                </div>
-
-                {/* Info */}
-                <div className="p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <h4 className="text-sm font-medium text-white/90 line-clamp-1">
-                      {vid.subject || '未命名'}
-                    </h4>
-                  </div>
-
-                  {vid.script && (
-                    <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 leading-relaxed">
-                      {vid.script}
-                    </p>
-                  )}
-
-                  <div className="flex items-center justify-between mt-3">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {vid.duration && (
-                        <span className="text-[10px] text-gray-500 flex items-center gap-1 bg-dark-bg px-1.5 py-0.5 rounded">
-                          <Clock size={9} /> {vid.duration}s
-                        </span>
-                      )}
-                      {vid.createdAt && (
-                        <span className="text-[10px] text-gray-600 flex items-center gap-1">
-                          {new Date(vid.createdAt).toLocaleDateString('zh-CN', {
-                            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                          })}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {vid.videoUrl && (
-                        <a
-                          href={vid.videoUrl}
-                          download
-                          className="p-1.5 rounded-lg text-gray-600 hover:text-blue-400 hover:bg-blue-500/10 transition-all opacity-0 group-hover:opacity-100"
-                          title="下载视频"
-                        >
-                          <Download size={13} />
-                        </a>
-                      )}
-                      <button
-                        onClick={() => handleDeleteVideo(vid.id)}
-                        className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
-                        title="删除"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Publish */}
-                  <div className="mt-3">
-                    <PublishSection text={vid.subject || vid.script || ''} mediaUrl={vid.videoUrl} />
-                  </div>
-                </div>
-              </div>
+                video={vid}
+                isNewComplete={videoDoneRef.current === vid.id}
+                onPlay={handlePlay}
+                onDelete={handleDeleteVideo}
+                onDownload={handleDownload}
+              />
             ))}
           </div>
         )}
       </div>
+
+      {/* Video player modal (lazy loaded) */}
+      {playingVideo && (
+        <React.Suspense fallback={null}>
+          <VideoPlayerModal
+            src={playingVideo.videoUrl}
+            title={playingVideo.subject}
+            onClose={handleClosePlayer}
+          />
+        </React.Suspense>
+      )}
+
+      {/* Keyboard shortcuts help panel */}
+      <KeyboardShortcutsHelp
+        open={helpOpen}
+        onClose={handleCloseHelp}
+      />
     </div>
   );
 }

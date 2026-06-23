@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 
 export interface UseWebSocketOptions {
   wsUrl?: string;
-  onProgress?: (data: { taskId: string; step: string; status: string }) => void;
+  onProgress?: (data: { taskId: string; step: string; status: string; errorMsg?: string; employee?: string; [key: string]: unknown }) => void;
   onVideoReady?: (data: { taskId: string; videoId: string; videoUrl: string }) => void;
   onAuthError?: () => void;
   onConnectionChange?: (connected: boolean) => void;

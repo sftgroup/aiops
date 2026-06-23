@@ -67,12 +67,12 @@ export function api(token: string | null) {
       if (!r.ok) throw new Error((await r.json()).error || '请求失败');
       return r.json();
     },
-    post: async (url: string, body?: any) => {
+    post: async (url: string, body?: Record<string, unknown>) => {
       const r = await fetch(`${API}${url}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: body ? JSON.stringify(body) : undefined });
       if (!r.ok) throw new Error((await r.json()).error || '请求失败');
       return r.json();
     },
-    put: async (url: string, body?: any) => {
+    put: async (url: string, body?: Record<string, unknown>) => {
       const r = await fetch(`${API}${url}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: body ? JSON.stringify(body) : undefined });
       if (!r.ok) throw new Error((await r.json()).error || '请求失败');
       return r.json();

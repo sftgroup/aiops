@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth, api } from '../AuthContext';
 import toast from 'react-hot-toast';
 import { Send, Loader2 } from 'lucide-react';
+import type { Account, PublishResult } from '../types';
 
 interface Props {
   /** 要发布的文字内容 */
@@ -14,7 +15,7 @@ interface Props {
 
 export default function PublishSection({ text, mediaUrl, onPublished }: Props) {
   const { token } = useAuth();
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [publishing, setPublishing] = useState(false);
 
@@ -38,13 +39,13 @@ export default function PublishSection({ text, mediaUrl, onPublished }: Props) {
         text,
         accountIds: selectedAccounts,
       });
-      const ok = results.filter((r: any) => r.status === 'published').length;
-      const fail = results.filter((r: any) => r.status === 'failed').length;
+      const ok = results.filter((r: PublishResult) => r.status === 'published').length;
+      const fail = results.filter((r: PublishResult) => r.status === 'failed').length;
       if (ok > 0) toast.success(`✅ 发布成功: ${ok} 个账号`);
       if (fail > 0) toast.error(`❌ ${fail} 个账号发布失败`);
       onPublished?.();
-    } catch (e: any) {
-      toast.error(e.message || '发布失败');
+    } catch (e: unknown) { const msg = e instanceof Error ? e.message : String(e);
+      toast.error(msg || '发布失败');
     } finally {
       setPublishing(false);
     }
@@ -56,15 +57,15 @@ export default function PublishSection({ text, mediaUrl, onPublished }: Props) {
   };
 
   // Group by platform
-  const groups = accounts.reduce((g: any, a: any) => {
+  const groups = accounts.reduce<Record<string, Account[]>>((g, a) => {
     (g[a.platform] = g[a.platform] || []).push(a);
     return g;
-  }, {} as Record<string, any[]>);
+  }, {});
 
   return (
-    <div className="border-t border-dark-border pt-4 space-y-3">
+    <div className="border-t border-dark-border pt-4 space-y-3" role="region" aria-label="发布到社交媒体">
       <h4 className="text-sm font-medium flex items-center gap-1">
-        <Send size={14} /> 发布到社交媒体
+        <Send size={14} aria-hidden="true" /> 发布到社交媒体
       </h4>
 
       {/* Account Picker */}
@@ -73,15 +74,16 @@ export default function PublishSection({ text, mediaUrl, onPublished }: Props) {
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {Object.entries(groups).flatMap(([platform, accs]) =>
-            (accs as any[]).map(acc => (
+            accs.map(acc => (
               <button
                 key={acc.id}
                 onClick={() => toggleAccount(acc.id)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${
+                className={`inline-flex items-center gap-1 px-3 py-2.5 rounded-xl text-xs border transition-colors ${
                   selectedAccounts.includes(acc.id)
                     ? 'bg-accent-primary/20 border-accent-primary text-accent-primary'
                     : 'bg-dark-bg border-dark-border text-gray-400 hover:border-gray-500'
                 }`}
+                style={{ minHeight: 44 }}
               >
                 {PLATFORM_ICONS[acc.platform] || '🔗'}
                 @{acc.screenName || acc.name}
@@ -95,9 +97,11 @@ export default function PublishSection({ text, mediaUrl, onPublished }: Props) {
       <button
         onClick={handlePublish}
         disabled={publishing || selectedAccounts.length === 0}
-        className="flex items-center gap-1.5 px-4 py-1.5 bg-accent-primary/60 hover:bg-accent-primary rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+        className="flex items-center gap-1.5 px-5 py-3 bg-accent-primary/60 hover:bg-accent-primary rounded-xl text-xs font-medium transition-colors disabled:opacity-50"
+        style={{ minHeight: 44 }}
+        aria-label={publishing ? '正在发布...' : `发布到 ${selectedAccounts.length} 个账号`}
       >
-        {publishing ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+        {publishing ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Send size={14} aria-hidden="true" />}
         {publishing ? '发布中...' : `发布到 ${selectedAccounts.length} 个账号`}
       </button>
     </div>

@@ -18,10 +18,12 @@ export default function Layout() {
     { to: '/settings', icon: Settings, label: '系统配置' },
   ];
 
+  const bottomLinks = links.filter(l => ['/', '/videos', '/content', '/settings'].includes(l.to));
+
   return (
     <div className="flex h-screen bg-dark-bg">
-      {/* Sidebar */}
-      <aside className="w-56 bg-dark-card border-r border-dark-border flex flex-col shrink-0">
+      {/* Sidebar — hidden on mobile (<768px) */}
+      <aside className="hidden md:flex md:flex-col w-56 bg-dark-card border-r border-dark-border shrink-0" aria-label="主导航">
         <div className="p-4 border-b border-dark-border">
           <h1 className="text-xl font-bold flex items-center gap-2">
             <span className="text-accent-primary">🤖</span> Aiops
@@ -52,18 +54,39 @@ export default function Layout() {
             </div>
             <span className="text-sm text-gray-300 truncate">{user?.username}</span>
           </div>
-          <button onClick={handleLogout} className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-500 hover:text-red-400 hover:bg-dark-hover rounded-lg transition-colors">
-            <LogOut size={15} /> 退出
+          <button onClick={handleLogout} className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-500 hover:text-red-400 hover:bg-dark-hover rounded-lg transition-colors" aria-label="退出登录">
+            <LogOut size={15} aria-hidden="true" /> 退出
           </button>
         </div>
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-auto">
-        <div className="p-6">
+      <main className="flex-1 overflow-auto pb-16 md:pb-0" role="main" aria-label="主内容">
+        <div className="p-4 sm:p-6">
           <Outlet />
         </div>
       </main>
+
+      {/* Mobile Bottom Tab Bar — <768px */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-dark-card border-t border-dark-border safe-bottom" aria-label="底部导航">
+        <div className="flex items-center justify-around h-14">
+          {bottomLinks.map(l => (
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.to === '/'}
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center gap-0.5 min-w-[48px] min-h-[44px] px-3 rounded-lg transition-colors ${
+                  isActive ? 'text-accent-primary' : 'text-gray-500'
+                }`
+              }
+            >
+              <l.icon size={20} />
+              <span className="text-[10px] font-medium">{l.label}</span>
+            </NavLink>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }

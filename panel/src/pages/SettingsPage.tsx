@@ -81,7 +81,7 @@ export default function SettingsPage() {
     try {
       await api(token).post('/settings', { section, ...data });
       toast.success(btnLabels[section] || section + ' 已保存');
-    } catch (e: any) { toast.error(e.message || '保存失败'); }
+    } catch (e: unknown) { toast.error((e instanceof Error ? e.message : String(e)) || '保存失败'); }
     finally { setSaving(null); }
   };
 
@@ -93,7 +93,7 @@ export default function SettingsPage() {
       setTestResult(resp);
       if (resp.status === 'ok') toast.success('LibTV 连接成功！');
       else toast.error(resp.message || '连接失败');
-    } catch (e: any) { setTestResult({ status: 'error', message: e.message }); toast.error(e.message); }
+    } catch (e: unknown) { const msg = e instanceof Error ? e.message : String(e); setTestResult({ status: 'error', message: msg }); toast.error(msg); }
   };
 
   const testDeepSeek = async () => {
@@ -104,7 +104,7 @@ export default function SettingsPage() {
       setTestResult(resp);
       if (resp.status === 'ok') toast.success('DeepSeek API 连接成功！');
       else toast.error(resp.message || '连接失败');
-    } catch (e: any) { setTestResult({ status: 'error', message: e.message }); toast.error(e.message); }
+    } catch (e: unknown) { const msg = e instanceof Error ? e.message : String(e); setTestResult({ status: 'error', message: msg }); toast.error(msg); }
   };
 
   const toggleShow = (key: string) => {
@@ -313,8 +313,9 @@ function PasswordField({ value, onChange, placeholder, show, onToggle, button }:
             type="button"
             onClick={onToggle}
             className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+            aria-label={show ? '隐藏密钥' : '显示密钥'}
           >
-            {show ? <EyeOff size={16} /> : <Eye size={16} />}
+            {show ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
           </button>
         )}
       </div>
@@ -377,8 +378,8 @@ function OAuthConfigCard({ title, platform, help, clientId, clientSecret, onClie
       <ConfigRow label="Redirect URI（注册时填入）">
         <div className="flex items-center gap-2">
           <code className="flex-1 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-xs font-mono break-all">{redirectUri}</code>
-          <button onClick={copyUri} className="p-2 text-gray-400 hover:text-white"><Copy size={14} /></button>
-          <a href={regUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-blue-400 hover:text-blue-300"><ExternalLink size={14} /></a>
+          <button onClick={copyUri} className="p-2 text-gray-400 hover:text-white" aria-label="复制回调地址"><Copy size={14} aria-hidden="true" /></button>
+          <a href={regUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-blue-400 hover:text-blue-300" aria-label="打开开发者平台"><ExternalLink size={14} aria-hidden="true" /></a>
         </div>
       </ConfigRow>
       <ConfigRow label="所需 Scope">

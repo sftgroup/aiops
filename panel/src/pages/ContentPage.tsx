@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { useAuth, api } from '../AuthContext';
 import toast from 'react-hot-toast';
 import { FileText, Trash2, Loader2, Sparkles, Download, Eye } from 'lucide-react';
 import PostPreviewModal from '../components/PostPreviewModal';
+import ContentCardSkeleton from '../components/skeleton/ContentCardSkeleton';
+import { useContentStore } from '../store/contentStore';
+import type { WsTaskMessage, GenerationEntry, Content } from '../types';
 
 const LS_KEY = '***';
 const DRAFT_KEY = '***';
@@ -15,17 +18,40 @@ function wsUrl() {
 
 export default function ContentPage() {
   const { token } = useAuth();
-  const [contents, setContents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [generatedText, setGeneratedText] = useState('');
-  const [generatedImage, setGeneratedImage] = useState('');
-  const [generating, setGenerating] = useState(false);
-  const [progressStep, setProgressStep] = useState('');
-  const [progressBar, setProgressBar] = useState({ step: '', progress: 0, message: '' });
-  const [showPreview, setShowPreview] = useState(false);
+
+  // ── All state from contentStore ─────────────────────
+  const contents = useContentStore((s) => s.contents);
+  const setContents = useContentStore((s) => s.setContents);
+  const loading = useContentStore((s) => s.loading);
+  const setLoading = useContentStore((s) => s.setLoading);
+  const aiPrompt = useContentStore((s) => s.aiPrompt);
+  const setAiPrompt = useContentStore((s) => s.setAiPrompt);
+  const generatedText = useContentStore((s) => s.generatedText);
+  const setGeneratedText = useContentStore((s) => s.setGeneratedText);
+  const generatedImage = useContentStore((s) => s.generatedImage);
+  const setGeneratedImage = useContentStore((s) => s.setGeneratedImage);
+  const generating = useContentStore((s) => s.generating);
+  const setGenerating = useContentStore((s) => s.setGenerating);
+  const progressStep = useContentStore((s) => s.progressStep);
+  const setProgressStep = useContentStore((s) => s.setProgressStep);
+  const progressBar = useContentStore((s) => s.progressBar);
+  const setProgressBar = useContentStore((s) => s.setProgressBar);
+  const showPreview = useContentStore((s) => s.showPreview);
+  const setShowPreview = useContentStore((s) => s.setShowPreview);
+
   const wsRef = useRef<WebSocket | null>(null);
   const pendingTaskId = useRef<string | null>(null);
+
+  // ─── Refs to hold latest values for async callbacks ──
+  const generatedTextRef = useRef(generatedText);
+  const aiPromptRef = useRef(aiPrompt);
+  const autoSaveRef = useRef<((text: string, imgUrl: string, prompt: string) => Promise<void>) | null>(null);
+  const saveDraftRef = useRef<((prompt: string, text: string, imageUrl: string) => void) | null>(null);
+  const loadRef = useRef<(() => void) | null>(null);
+
+  // Sync refs with store values
+  useEffect(() => { generatedTextRef.current = generatedText; }, [generatedText]);
+  useEffect(() => { aiPromptRef.current = aiPrompt; }, [aiPrompt]);
 
   // ─── WebSocket 连接 ───────────────────────────────
   useEffect(() => {
@@ -38,12 +64,10 @@ export default function ContentPage() {
         wsRef.current = ws;
 
         ws.onopen = () => {
-          // 1) 先发送 auth 认证，让服务端绑定 ws.userId
           const tk = localStorage.getItem('token');
           if (tk) {
             ws!.send(JSON.stringify({ type: 'auth', token: tk }));
           }
-          // 2) 如果有进行中的任务，重新订阅
           if (pendingTaskId.current) {
             ws!.send(JSON.stringify({ type: 'subscribe', taskId: pendingTaskId.current }));
           }
@@ -60,7 +84,6 @@ export default function ContentPage() {
 
         ws.onclose = () => {
           wsRef.current = null;
-          // 3 秒后重连
           reconnectTimer = setTimeout(connect, 3000);
         };
 
@@ -76,6 +99,8 @@ export default function ContentPage() {
       clearTimeout(reconnectTimer);
       ws?.close();
     };
+    // handleWsMessage intentionally omitted to avoid re-creating WS on every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 如果有 pending taskId，重连后自动订阅
@@ -86,7 +111,7 @@ export default function ContentPage() {
   }, [wsRef.current?.readyState]);
 
   // ─── WebSocket 消息处理 ───────────────────────────
-  const handleWsMessage = useCallback((msg: any) => {
+  const handleWsMessage = useCallback((msg: WsTaskMessage) => {
     const { step, progress, message, iteration, total, url, error } = msg;
 
     if (step === 'completed') {
@@ -97,12 +122,11 @@ export default function ContentPage() {
       setProgressStep('');
       localStorage.removeItem(LS_KEY);
 
-      // 更新保存的记录
       if (generatedTextRef.current && aiPromptRef.current) {
-        autoSaveRef.current(generatedTextRef.current, imgUrl, aiPromptRef.current);
-        saveDraftRef.current(aiPromptRef.current, generatedTextRef.current, imgUrl);
+        autoSaveRef.current?.(generatedTextRef.current, imgUrl, aiPromptRef.current);
+        saveDraftRef.current?.(aiPromptRef.current, generatedTextRef.current, imgUrl);
       }
-      loadRef.current();
+      loadRef.current?.();
       toast.success('已自动保存');
       setGenerating(false);
       return;
@@ -114,19 +138,18 @@ export default function ContentPage() {
       toast('配图生成失败，文案已保存', { icon: '⚠️' });
       localStorage.removeItem(LS_KEY);
       if (generatedTextRef.current && aiPromptRef.current) {
-        autoSaveRef.current(generatedTextRef.current, '', aiPromptRef.current);
-        saveDraftRef.current(aiPromptRef.current, generatedTextRef.current, '');
+        autoSaveRef.current?.(generatedTextRef.current, '', aiPromptRef.current);
+        saveDraftRef.current?.(aiPromptRef.current, generatedTextRef.current, '');
       }
       setGenerating(false);
-      loadRef.current();
+      loadRef.current?.();
       return;
     }
 
-    // 进度更新（使用 libtv 实时进度）
     const realProgress = msg.libtvProgress != null && msg.libtvProgress > 0
       ? 20 + Math.round((msg.libtvProgress / 100) * 75)
       : (progress || 0);
-    setProgressBar({ step: progress || step, progress: realProgress, message: message || '' });
+    setProgressBar({ step: String(progress || step || ''), progress: realProgress, message: message || '' });
     setProgressStep(
       step === 'polling' && msg.libtvProgress != null
         ? `配图生成中 ${msg.libtvProgress}%`
@@ -134,7 +157,7 @@ export default function ContentPage() {
           ? `配图生成中 (${iteration || '?'}/${total || 200})...`
           : message || '生成中...'
     );
-  }, []);
+  }, [setGeneratedImage, setProgressBar, setProgressStep, setGenerating]);
 
   // ─── 草稿持久化 ─────────────────────────────
   const saveDraft = useCallback((prompt: string, text: string, imageUrl: string) => {
@@ -152,30 +175,24 @@ export default function ContentPage() {
   const autoSave = useCallback(async (text: string, imgUrl: string, prompt: string) => {
     if (!token) return;
     try {
-      const body: any = { title: prompt, text };
+      const body: Record<string, unknown> = { title: prompt, text };
       if (imgUrl) body.imageUrl = imgUrl;
       await api(token).post('/contents/text', body);
       load();
     } catch (e) {
       console.error('[autoSave] Failed:', e);
     }
+  // load is intentionally omitted from deps — we use loadRef for latest version and it's not recreated
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const load = useCallback(async () => {
     if (!token) return;
     try { setContents(await api(token).get('/contents')); }
     catch {} finally { setLoading(false); }
-  }, [token]);
+  }, [token, setContents, setLoading]);
 
-  // ─── 用 ref 存最新值（避免 closure 过期） ────────
-  const generatedTextRef = useRef(generatedText);
-  const aiPromptRef = useRef(aiPrompt);
-  const autoSaveRef = useRef(autoSave);
-  const saveDraftRef = useRef(saveDraft);
-  const loadRef = useRef(load);
-
-  useEffect(() => { generatedTextRef.current = generatedText; }, [generatedText]);
-  useEffect(() => { aiPromptRef.current = aiPrompt; }, [aiPrompt]);
+  // ─── Wire up refs ────────────────────────────────
   useEffect(() => { autoSaveRef.current = autoSave; }, [autoSave]);
   useEffect(() => { saveDraftRef.current = saveDraft; }, [saveDraft]);
   useEffect(() => { loadRef.current = load; }, [load]);
@@ -183,7 +200,6 @@ export default function ContentPage() {
   // 切换页面/刷新时从 localStorage 恢复草稿
   useEffect(() => {
     try {
-      // 如果已有草稿，说明生成已完成，清理可能遗留的任务标记
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const draft = JSON.parse(raw);
@@ -194,10 +210,11 @@ export default function ContentPage() {
         if (draft.prompt) setAiPrompt(draft.prompt);
         if (draft.text) setGeneratedText(draft.text);
         if (draft.imageUrl) setGeneratedImage(draft.imageUrl);
-        // 已有完成草稿 → 清理可能遗留的未完成任务标记，防止重复生成
         localStorage.removeItem(LS_KEY);
       }
     } catch {}
+  // Only on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 切页面时保存草稿
@@ -223,21 +240,18 @@ export default function ContentPage() {
 
         if (task.taskId && task.step === 'image') {
           pendingTaskId.current = task.taskId;
-          // 重连后 ws.onopen 会自动订阅
           setGenerating(true);
           setProgressStep('恢复生成中...');
           setProgressBar({ step: 'polling', progress: 55, message: '等待 WebSocket 通知...' });
 
-          // 也留一手 REST 降级
           restorePolling(task.taskId, task.text, task.prompt);
         } else if (task.text) {
-          // 文案已有，配图未提交
           setGenerating(true);
           setProgressStep('恢复生成：提交配图任务...');
           setProgressBar({ step: 'image-start', progress: 55, message: '重新连接 LibTV...' });
           setTimeout(() => {
             api(token).post('/ai/image', { subject: task.prompt, style: 'general' })
-              .then((r: any) => {
+              .then((r: { taskId?: string }) => {
                 if (r.taskId) {
                   pendingTaskId.current = r.taskId;
                   task.taskId = r.taskId;
@@ -260,6 +274,8 @@ export default function ContentPage() {
         localStorage.removeItem(LS_KEY);
       }
     }
+  // Only on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   useEffect(() => { load(); }, [token, load]);
@@ -290,8 +306,8 @@ export default function ContentPage() {
       setGeneratedText(textResult.text);
       saveDraft(aiPrompt, textResult.text, generatedImage);
       toast.success('文案已更新');
-    } catch (e: any) {
-      toast.error(e.message || '文案生成失败');
+    } catch (e: unknown) {
+      toast.error((e instanceof Error ? e.message : String(e)) || '文案生成失败');
     }
     setGenerating(false);
   };
@@ -310,7 +326,6 @@ export default function ContentPage() {
       setProgressStep('排队中...');
       setProgressBar({ step: 'queued', progress: 55, message: '已提交，等待队列处理...' });
 
-      // REST 轮询等配图完成
       const poll = setInterval(async () => {
         if (!token) { clearInterval(poll); return; }
         try {
@@ -335,13 +350,13 @@ export default function ContentPage() {
           }
         } catch { /* 继续轮询 */ }
       }, 3000);
-    } catch (e: any) {
-      toast.error(e.message || '配图生成失败');
+    } catch (e: unknown) {
+      toast.error((e instanceof Error ? e.message : String(e)) || '配图生成失败');
       setGenerating(false);
     }
   };
 
-  const generateFlow = async (prompt: string, entry: any) => {
+  const generateFlow = async (prompt: string, entry: GenerationEntry) => {
     try {
       const textResult = await api(token!).post('/ai/generate', { prompt, platform: 'twitter' });
       setGeneratedText(textResult.text);
@@ -366,12 +381,11 @@ export default function ContentPage() {
       entry.taskId = taskId;
       localStorage.setItem(LS_KEY, JSON.stringify(entry));
 
-      // WebSocket 为主，同时启动 REST 降级轮询兜底
       setProgressStep('排队中...');
       setProgressBar({ step: 'queued', progress: 55, message: '已提交，等待队列处理...' });
       restorePolling(taskId, textResult.text, prompt);
-    } catch (e: any) {
-      toast.error(e.message || '生成失败');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e) || '生成失败');
       localStorage.removeItem(LS_KEY);
       setGenerating(false);
     }
@@ -420,8 +434,8 @@ export default function ContentPage() {
           ? `配图生成中 ${status.libtvProgress}%`
           : `配图生成中 (${status.iteration || '?'}/${status.total || 200})...`;
         setProgressStep(status.step === 'polling' ? realPct : (status.message || '生成中...'));
-      } catch (e: any) {
-        const errText = String(e.message || e);
+      } catch (e: unknown) {
+        const errText = e instanceof Error ? e.message : String(e);
         if (errText.includes('404') || errText.includes('不存在') || errText.includes('过期')) {
           clearInterval(restorePollingRef.current!);
           restorePollingRef.current = null;
@@ -431,7 +445,7 @@ export default function ContentPage() {
           setGenerating(false);
         }
       }
-    }, 5000); // 降级轮询 5s 一次，减少请求
+    }, 5000);
   };
 
   // Cleanup
@@ -446,7 +460,7 @@ export default function ContentPage() {
       await api(token!).del(`/contents/${id}`);
       toast.success('已删除');
       load();
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : String(e)); }
   };
 
   const handlePreviewClose = () => {
@@ -505,6 +519,7 @@ export default function ContentPage() {
                   value={aiPrompt}
                   onChange={e => setAiPrompt(e.target.value)}
                   disabled={generating}
+                  aria-label="AI 生成提示词"
                 />
                 <div className="absolute bottom-2 right-3 text-xs text-gray-600">
                   {aiPrompt.length}/200
@@ -534,7 +549,7 @@ export default function ContentPage() {
 
               {/* Progress */}
               {generating && (
-                <div className="bg-dark-bg rounded-xl p-4 space-y-3">
+                <div className="bg-dark-bg rounded-xl p-4 space-y-3" role="progressbar" aria-label={progressStep} aria-busy="true" aria-live="polite">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-accent-primary/20 flex items-center justify-center">
                       <Loader2 size={14} className="animate-spin text-accent-primary" />
@@ -576,7 +591,6 @@ export default function ContentPage() {
                   {/* Text preview card */}
                   {generatedText && (
                     <div className="bg-dark-bg rounded-xl border border-dark-border overflow-hidden mb-3">
-                      {/* Twitter-style header */}
                       <div className="px-4 pt-3 pb-1 flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent-primary to-purple-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
                           AI
@@ -659,9 +673,7 @@ export default function ContentPage() {
 
             <div className="p-4">
               {loading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 size={20} className="animate-spin text-gray-500" />
-                </div>
+                <ContentCardSkeleton count={5} />
               ) : contents.length === 0 ? (
                 <div className="text-center py-12">
                   <FileText size={32} className="mx-auto text-gray-700 mb-3" />
@@ -669,7 +681,7 @@ export default function ContentPage() {
                   <p className="text-xs text-gray-600 mt-1">点击「AI 一键生成」开始创作</p>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[540px] overflow-y-auto pr-1 scrollbar-thin">
+                <div className="space-y-2 max-h-[540px] overflow-y-auto pr-1 scrollbar-thin animate-fade-in">
                   {contents.map(c => (
                     <div key={c.id} className="group bg-dark-bg rounded-xl p-3.5 hover:bg-dark-hover transition-colors cursor-pointer border border-transparent hover:border-dark-border">
                       <div className="flex items-start gap-3">
@@ -699,8 +711,9 @@ export default function ContentPage() {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }}
                           className="p-1.5 rounded-lg text-gray-600 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0"
+                          aria-label="删除内容"
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={13} aria-hidden="true" />
                         </button>
                       </div>
                     </div>

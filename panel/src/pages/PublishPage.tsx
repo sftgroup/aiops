@@ -2,26 +2,35 @@ import React, { useState, useEffect } from 'react';
 import { useAuth, api } from '../AuthContext';
 import toast from 'react-hot-toast';
 import { Send, CheckCircle2, Globe, X, Loader2, Users, ExternalLink, FileText, Trash2 } from 'lucide-react';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import type { Account, Content, PublishRecord, PublishResult } from '../types';
 
 export default function PublishPage() {
   const { token } = useAuth();
-  const [contents, setContents] = useState<any[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [publishes, setPublishes] = useState<any[]>([]);
+  const [contents, setContents] = useState<Content[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [publishes, setPublishes] = useState<PublishRecord[]>([]);
   const [selectedContent, setSelectedContent] = useState('');
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [customText, setCustomText] = useState('');
   const [publishing, setPublishing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('确定删除这条发布记录？')) return;
+    setConfirmDeleteId(id);
+  };
+
+  const confirmDeleteAction = async () => {
+    if (!confirmDeleteId) return;
+    const id = confirmDeleteId;
+    setConfirmDeleteId(null);
     try {
       await api(token!).del('/publishes/' + encodeURIComponent(id));
       toast.success('已删除');
       load();
-    } catch (e: any) {
-      toast.error('删除失败: ' + (e.message || ''));
+    } catch (e: unknown) {
+      toast.error('删除失败: ' + ((e instanceof Error ? e.message : String(e)) || ''));
     }
   };
 
@@ -59,23 +68,23 @@ export default function PublishPage() {
         accountIds: selectedAccounts,
         text: customText.trim() || undefined,
       });
-      const ok = results.filter((r: any) => r.status === 'published').length;
-      const fail = results.filter((r: any) => r.status === 'failed').length;
+      const ok = results.filter((r: PublishResult) => r.status === 'published').length;
+      const fail = results.filter((r: PublishResult) => r.status === 'failed').length;
       toast.success(`发布完成: ${ok} 成功${fail ? `, ${fail} 失败` : ''}`);
       load();
       setSelectedContent('');
       setSelectedAccounts([]);
       setCustomText('');
-    } catch (e: any) { toast.error(e.message || '发布失败'); }
+    } catch (e: unknown) { toast.error((e instanceof Error ? e.message : String(e)) || '发布失败'); }
     finally { setPublishing(false); }
   };
 
   // Group accounts by platform
-  const platformGroups = accounts.reduce((groups: any, acc: any) => {
+  const platformGroups = accounts.reduce<Record<string, Account[]>>((groups, acc) => {
     if (!groups[acc.platform]) groups[acc.platform] = [];
     groups[acc.platform].push(acc);
     return groups;
-  }, {} as Record<string, any[]>);
+  }, {});
 
   const PLATFORM_ICONS: Record<string, string> = {
     twitter: '🐦', youtube: '▶️', tiktok: '🎵', meta: '📱',
@@ -133,14 +142,14 @@ export default function PublishPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {(Object.entries(platformGroups) as [string, any[]][]).map(([platform, accs]) => (
+                {(Object.entries(platformGroups) as [string, Account[]][]).map(([platform, accs]) => (
                   <div key={platform} className="bg-dark-bg rounded-lg p-3 border border-dark-border">
                     <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
                       {PLATFORM_ICONS[platform] || '🔗'} {platform}
                       <span className="text-gray-600">({accs.length}个)</span>
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {(accs as any[]).map(acc => (
+                      {accs.map(acc => (
                         <button
                           key={acc.id}
                           onClick={() => toggleAccount(acc.id)}
@@ -184,7 +193,7 @@ export default function PublishPage() {
             <p className="text-sm text-gray-500">暂无绑定账号</p>
           ) : (
             <div className="space-y-2">
-              {(Object.entries(platformGroups) as [string, any[]][]).map(([platform, accs]) => (
+              {(Object.entries(platformGroups) as [string, Account[]][]).map(([platform, accs]) => (
                 <div key={platform} className="flex items-center justify-between text-sm">
                   <span>{PLATFORM_ICONS[platform] || '🔗'} {platform}</span>
                   <span className="text-gray-400">{accs.length} 个</span>
@@ -230,8 +239,9 @@ export default function PublishPage() {
                 onClick={() => handleDelete(p.id)}
                 className="text-gray-600 hover:text-red-400 transition-colors shrink-0 p-1"
                 title="删除"
+                aria-label="删除发布记录"
               >
-                <Trash2 size={14} />
+                <Trash2 size={14} aria-hidden="true" />
               </button>
             </div>
           ))}
@@ -240,6 +250,16 @@ export default function PublishPage() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        title="删除发布记录"
+        message="确定删除这条发布记录？删除后无法恢复。"
+        confirmLabel="删除"
+        variant="danger"
+        onConfirm={confirmDeleteAction}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }

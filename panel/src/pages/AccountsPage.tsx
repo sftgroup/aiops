@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth, api } from '../AuthContext';
 import { ExternalLink, CheckCircle2, Globe, X, Trash2, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import type { Account } from '../types';
 
 const PLATFORM_ICONS: Record<string, string> = {
   twitter: '🐦', youtube: '▶️', meta: '📱', reddit: '🔴',
@@ -20,7 +22,7 @@ const OAUTH2_PLATFORMS = ['youtube', 'meta', 'reddit'];
 
 export default function AccountsPage() {
   const { token } = useAuth();
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Twitter binding modal
@@ -28,6 +30,7 @@ export default function AccountsPage() {
   const [authUrl, setAuthUrl] = useState('');
   const [pinCode, setPinCode] = useState('');
   const [bindingStep, setBindingStep] = useState<'idle' | 'loading' | 'auth' | 'done'>('idle');
+  const [confirmUnbind, setConfirmUnbind] = useState<{ id: string; name: string } | null>(null);
 
   const loadAccounts = async () => {
     if (!token) return;
@@ -69,8 +72,8 @@ export default function AccountsPage() {
       setAuthUrl(resp.authUrl);
       setBindingStep('auth');
       window.open(resp.authUrl, '_blank');
-    } catch (e: any) {
-      toast.error(e.message || '获取授权链接失败');
+    } catch (e: unknown) {
+      toast.error((e instanceof Error ? e.message : String(e)) || '获取授权链接失败');
       setBindingStep('idle');
     }
   };
@@ -92,8 +95,8 @@ export default function AccountsPage() {
         setBindingStep('idle');
       }, 1500);
       loadAccounts();
-    } catch (e: any) {
-      toast.error(e.message || '绑定失败，请重试');
+    } catch (e: unknown) {
+      toast.error((e instanceof Error ? e.message : String(e)) || '绑定失败，请重试');
       setBindingStep('auth');
     }
   };
@@ -104,19 +107,25 @@ export default function AccountsPage() {
       const resp = await api(token!).post(`/oauth/${platform}/auth-url`, {});
       // Redirect user to the platform's auth page
       window.location.href = resp.authUrl;
-    } catch (e: any) {
-      toast.error(e.message || `获取 ${PLATFORM_NAMES[platform] || platform} 授权链接失败`);
+    } catch (e: unknown) {
+      toast.error((e instanceof Error ? e.message : String(e)) || `获取 ${PLATFORM_NAMES[platform] || platform} 授权链接失败`);
     }
   };
 
   // ── Unbind ──
   const handleUnbind = async (id: string, name: string) => {
-    if (!confirm(`确定解除绑定 ${name}？`)) return;
+    setConfirmUnbind({ id, name });
+  };
+
+  const confirmUnbindAction = async () => {
+    if (!confirmUnbind) return;
+    const { id, name } = confirmUnbind;
+    setConfirmUnbind(null);
     try {
       await api(token!).del('/accounts/' + id);
-      toast.success(`已解除绑定`);
+      toast.success(`已解除绑定 ${name}`);
       loadAccounts();
-    } catch (e: any) { toast.error(e.message || '解除绑定失败'); }
+    } catch (e: unknown) { toast.error((e instanceof Error ? e.message : String(e)) || '解除绑定失败'); }
   };
 
   const getAccountsByPlatform = (platform: string) =>
@@ -147,8 +156,8 @@ export default function AccountsPage() {
                   <p className="text-sm font-medium">@{acc.screenName}</p>
                   <p className="text-xs text-gray-500">{new Date(acc.createdAt).toLocaleDateString('zh-CN')} 绑定</p>
                 </div>
-                <button onClick={() => handleUnbind(acc.id, '@' + acc.screenName)} className="p-1.5 text-gray-500 hover:text-red-400 rounded-lg">
-                  <Trash2 size={15} />
+                <button onClick={() => handleUnbind(acc.id, '@' + acc.screenName)} className="p-1.5 text-gray-500 hover:text-red-400 rounded-lg" aria-label={`解除绑定 @${acc.screenName}`}>
+                  <Trash2 size={15} aria-hidden="true" />
                 </button>
               </div>
             ))}
@@ -191,11 +200,11 @@ export default function AccountsPage() {
 
       {/* Twitter Binding Modal */}
       {showTwitterModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="绑定 Twitter 账号">
           <div className="bg-dark-card rounded-xl border border-dark-border w-full max-w-md mx-4 overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-dark-border">
               <h3 className="font-semibold">🐦 绑定 Twitter 账号</h3>
-              <button onClick={() => setShowTwitterModal(false)} className="p-1 text-gray-400 hover:text-white"><X size={20} /></button>
+              <button onClick={() => setShowTwitterModal(false)} className="p-1 text-gray-400 hover:text-white" aria-label="关闭"><X size={20} /></button>
             </div>
             <div className="p-5 space-y-4">
               {bindingStep === 'idle' && (
@@ -222,7 +231,7 @@ export default function AccountsPage() {
                     <p className="text-sm font-medium">第 2 步：输入 PIN 码</p>
                     <input type="text" placeholder="输入 7 位 PIN 码..." value={pinCode}
                       onChange={e => setPinCode(e.target.value)}
-                      className="w-full px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-white text-center text-lg tracking-widest" autoFocus />
+                      className="w-full px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-white text-center text-lg tracking-widest" autoFocus aria-label="PIN 码" />
                   </div>
                   <button onClick={handleSubmitPin} disabled={!pinCode.trim()}
                     className="w-full py-2.5 bg-blue-500 rounded-lg font-medium hover:bg-blue-600 disabled:opacity-50">确认绑定</button>
@@ -238,6 +247,16 @@ export default function AccountsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmUnbind}
+        title="解除账号绑定"
+        message={`确定解除绑定「${confirmUnbind?.name}」？`}
+        confirmLabel="解除绑定"
+        variant="danger"
+        onConfirm={confirmUnbindAction}
+        onCancel={() => setConfirmUnbind(null)}
+      />
     </div>
   );
 }
@@ -245,7 +264,7 @@ export default function AccountsPage() {
 // Reusable platform card component
 function PlatformCard({ platform, icon, label, desc, accounts, onBind, onUnbind, color }: {
   platform: string; icon: string; label: string; desc: string;
-  accounts: any[]; onBind: () => void; onUnbind: (id: string, name: string) => void; color: string;
+  accounts: Account[]; onBind: () => void; onUnbind: (id: string, name: string) => void; color: string;
 }) {
   return (
     <div className="bg-dark-card rounded-xl border border-dark-border overflow-hidden">
@@ -264,8 +283,8 @@ function PlatformCard({ platform, icon, label, desc, accounts, onBind, onUnbind,
               <p className="text-sm font-medium">{acc.name}</p>
               <p className="text-xs text-gray-500">{new Date(acc.createdAt).toLocaleDateString('zh-CN')} 绑定</p>
             </div>
-            <button onClick={() => onUnbind(acc.id, acc.name)} className="p-1.5 text-gray-500 hover:text-red-400 rounded-lg">
-              <Trash2 size={15} />
+            <button onClick={() => onUnbind(acc.id, acc.name || acc.screenName)} className="p-1.5 text-gray-500 hover:text-red-400 rounded-lg" aria-label={`解除绑定 ${acc.name || acc.screenName}`}>
+              <Trash2 size={15} aria-hidden="true" />
             </button>
           </div>
         ))}

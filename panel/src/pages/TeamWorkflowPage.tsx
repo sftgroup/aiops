@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, api } from '../AuthContext';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import toast from 'react-hot-toast';
+import type { Account } from '../types';
 
 // ─── Types ─────────────────────────────────────────────
 type ContentType = 'text_image' | 'video';
@@ -187,7 +190,7 @@ function EditTeamModal({
   isNew,
 }: {
   team: Partial<Team>;
-  allAccounts: any[];
+  allAccounts: Account[];
   onSave: (data: Partial<Team>) => void;
   onClose: () => void;
   isNew?: boolean;
@@ -256,7 +259,7 @@ function EditTeamModal({
   };
 
   // Group accounts by platform
-  const accountsByPlatform: Record<string, any[]> = {};
+  const accountsByPlatform: Record<string, Account[]> = {};
   allAccounts.forEach(acc => {
     const p = (acc.platform || 'twitter').toLowerCase();
     if (!accountsByPlatform[p]) accountsByPlatform[p] = [];
@@ -439,16 +442,11 @@ function EditTeamModal({
 export default function TeamWorkflowPage() {
   const { token } = useAuth();
   const [teams, setTeams] = useState<TeamCard[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTeam, setEditingTeam] = useState<TeamCard | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-
-  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+  const [confirmDelete, setConfirmDelete] = useState<TeamCard | null>(null);
 
   const loadTeams = useCallback(async () => {
     try {
@@ -458,8 +456,8 @@ export default function TeamWorkflowPage() {
       ]);
       setTeams(t.data || t || []);
       setAccounts(a.data || a || []);
-    } catch (e: any) {
-      showToast('加载失败: ' + (e.message || ''), 'error');
+    } catch (e: unknown) {
+      toast.error('加载失败: ' + ((e instanceof Error ? e.message : String(e)) || ''));
     } finally {
       setLoading(false);
     }
@@ -471,16 +469,16 @@ export default function TeamWorkflowPage() {
     try {
       if (editingTeam && !showCreate) {
         await api(token!).put(`/teams/${editingTeam._id}`, data);
-        showToast('保存成功');
+        toast.success('保存成功');
       } else {
         await api(token!).post('/teams', data);
-        showToast('创建成功');
+        toast.success('创建成功');
       }
       setEditingTeam(null);
       setShowCreate(false);
       loadTeams();
-    } catch (e: any) {
-      showToast('操作失败: ' + (e.message || ''), 'error');
+    } catch (e: unknown) {
+      toast.error('操作失败: ' + ((e instanceof Error ? e.message : String(e)) || ''));
     }
   };
 
@@ -488,19 +486,25 @@ export default function TeamWorkflowPage() {
     try {
       await api(token!).post(`/teams/${team._id}/toggle`);
       loadTeams();
-    } catch (e: any) {
-      showToast('操作失败', 'error');
+    } catch (e: unknown) {
+      toast.error('操作失败');
     }
   };
 
   const handleDelete = async (team: TeamCard) => {
-    if (!confirm(`确定删除「${team.name}」？`)) return;
+    setConfirmDelete(team);
+  };
+
+  const confirmDeleteTeam = async () => {
+    if (!confirmDelete) return;
+    const team = confirmDelete;
+    setConfirmDelete(null);
     try {
       await api(token!).del(`/teams/${team._id}`);
-      showToast('已删除');
+      toast.success('已删除');
       loadTeams();
-    } catch (e: any) {
-      showToast('删除失败', 'error');
+    } catch (e: unknown) {
+      toast.error('删除失败');
     }
   };
 
@@ -508,20 +512,20 @@ export default function TeamWorkflowPage() {
     try {
       const { _id, status, todayProgress, ...rest } = team;
       await api(token!).post('/teams', { ...rest, name: rest.name + ' (副本)' });
-      showToast('已复制');
+      toast.success('已复制');
       loadTeams();
-    } catch (e: any) {
-      showToast('复制失败', 'error');
+    } catch (e: unknown) {
+      toast.error('复制失败');
     }
   };
 
   const handleRunNow = async (team: TeamCard) => {
     try {
       await api(token!).post(`/teams/${team._id}/run`);
-      showToast('已触发执行');
+      toast.success('已触发执行');
       loadTeams();
-    } catch (e: any) {
-      showToast('触发失败', 'error');
+    } catch (e: unknown) {
+      toast.error('触发失败');
     }
   };
 
@@ -590,15 +594,15 @@ export default function TeamWorkflowPage() {
       )}
 
       {/* Toast */}
-      {toast && (
-        <div
-          className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-lg shadow-lg text-sm font-medium transition-all ${
-            toast.type === 'success' ? 'bg-green-800 text-green-200' : 'bg-red-800 text-red-200'
-          }`}
-        >
-          {toast.msg}
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="删除运营团队"
+        message={`确定删除「${confirmDelete?.name}」？删除后无法恢复。`}
+        confirmLabel="删除"
+        variant="danger"
+        onConfirm={confirmDeleteTeam}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }
