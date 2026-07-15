@@ -1,0 +1,99 @@
+{
+  "hero": {
+    "title": "AI 内容运营平台",
+    "subtitle": "从文案到视频，AI 全链路创作工具",
+    "tagline": "智能生成文案、语音、视频、海报 — 一站式 AI 内容创作平台，让创意落地快 10 倍",
+    "ctaTrial": "免费试用",
+    "ctaPricing": "查看定价"
+  },
+  "nav": {
+    "features": "功能",
+    "pricing": "定价",
+    "login": "登录",
+    "register": "注册"
+  },
+  "features": {
+    "title": "四大核心能力",
+    "subtitle": "覆盖内容生产全链路，从想法到成品一步到位",
+    "copywriting": {
+      "title": "AI 文案生成",
+      "desc": "智能生成公众号推文、小红书笔记、营销文案，多平台适配一键导出"
+    },
+    "tts": {
+      "title": "TTS 语音合成",
+      "desc": "300+ 种逼真音色可选，支持多语言，文本转语音质量达到专业配音水准"
+    },
+    "video": {
+      "title": "AI 视频生成",
+      "desc": "文案一键转短视频，海量素材库 + AI 数字人，适合短视频平台分发"
+    },
+    "poster": {
+      "title": "AI 海报生成",
+      "desc": "输入描述自动生成营销海报，海量模板 + AI 设计，品牌风格自由定制"
+    }
+  },
+  "stats": {
+    "title": "我们的成绩",
+    "users": "注册用户",
+    "teams": "企业团队",
+    "daily": "日生成内容",
+    "rating": "用户评分"
+  },
+  "pricing": {
+    "title": "灵活的定价方案",
+    "subtitle": "从个人创作者到大型团队，总有一款适合您",
+    "free": { "name": "Free", "price": "0 USDC", "desc": "个人探索尝鲜", "cta": "免费开始" },
+    "starter": { "name": "Starter", "price": "2,999 USDC", "desc": "专业创作者", "cta": "立即升级", "badge": "最受欢迎" },
+    "pro": { "name": "Pro", "price": "9,999 USDC", "desc": "中小型团队", "cta": "开始试用" },
+    "enterprise": { "name": "Enterprise", "price": "49,999 USDC", "desc": "大型企业", "cta": "联系我们" }
+  },
+  "pricingFeatures": {
+    "free": [
+      "10,000 Token/月",
+      "50 次 AI 生成/月",
+      "10 次 TTS 合成/月",
+      "1 次视频/月",
+      "标准文案模板",
+      "标准 TTS 音色",
+      "基础分析 Dashboard"
+    ],
+    "starter": [
+      "100,000 Token/月",
+      "200 次 AI 生成/月",
+      "50 次 TTS 合成/月",
+      "10 次视频/月",
+      "高级文案模板",
+      "全部 TTS 音色",
+      "AI 海报生成",
+      "优先技术支持"
+    ],
+    "pro": [
+      "500,000 Token/月",
+      "1,000 次 AI 生成/月",
+      "200 次 TTS 合成/月",
+      "50 次视频/月",
+      "团队协作空间",
+      "AI 视频生成 (1080p)",
+      "品牌自定义模板",
+      "API 接口",
+      "专属客户经理"
+    ],
+    "enterprise": [
+      "2,000,000 Token/月",
+      "5,000 次 AI 生成/月",
+      "1,000 次 TTS 合成/月",
+      "200 次视频/月",
+      "私有化部署",
+      "定制化模型训练",
+      "专属 API 通道",
+      "SLA 保障",
+      "7×24 技术支持"
+    ]
+  },
+  "footer": {
+    "copyright": "© 2026 Aiops. All rights reserved.",
+    "github": "GitHub",
+    "contact": "联系我们",
+    "description": "AI 内容运营平台 — 从文案到视频，AI 全链路创作工具，助力内容创作者和企业提升效率。"
+  }
+}

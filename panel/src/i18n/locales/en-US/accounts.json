@@ -1,0 +1,60 @@
+{
+  "title": "Account Management",
+  "bind": "Bind {{platform}}",
+  "bindAnother": "+ Bind Another",
+  "boundOn": "Bound on {{date}}",
+  "unbind": "Unbind",
+  "unbindConfirm": "Are you sure you want to unbind「{{name}}」?",
+  "unbindTitle": "Unbind Account",
+  "unbindSuccess": "Unbound {{name}}",
+  "unbindFailed": "Failed to unbind",
+  "confirmUnbind": "Unbind",
+  "comingSoon": "Coming Soon",
+  "oauthPinMode": "OAuth 1.0a PIN Mode",
+  "oauthPkce": "OAuth 2.0 PKCE",
+  "bindTwitter": "Twitter account bound successfully!",
+  "bindSuccess": "{{platform}} bound successfully!",
+  "getAuthLink": "Get Authorization Link",
+  "getAuthLinkFailed": "Failed to get authorization link",
+  "getOAuthLinkFailed": "Failed to get {{platform}} authorization link",
+  "openAuthPage": "Click here to open (window opened)",
+  "step1": "Step 1: Open Twitter authorization page",
+  "step2": "Step 2: Enter the PIN code",
+  "pinCodePlaceholder": "Enter 7-digit PIN code...",
+  "pinCodeLabel": "PIN Code",
+  "confirmBind": "Confirm Binding",
+  "bindFailed": "Binding failed, please try again",
+  "processing": "Processing...",
+  "bindSuccessTitle": "Bound successfully!",
+  "bindDialogTitle": "Bind Twitter Account",
+  "authDescription": "Click the button below to get the Twitter authorization link",
+  "enterPin": "Please enter the PIN code",
+  "close": "Close",
+  "button": {
+    "bind": "Bind",
+    "unbind": "Unbind"
+  },
+  "error": {
+    "expired": "Authorization expired, please try again",
+    "missing_params": "Callback parameters incomplete",
+    "token_exchange_failed": "Failed to get Token",
+    "invalid_state": "Invalid authorization state, please try again",
+    "unknown": "Authorization failed: {{error}}"
+  },
+  "platform": {
+    "twitter": "Twitter/X",
+    "youtube": "YouTube",
+    "meta": "Facebook / Instagram",
+    "reddit": "Reddit",
+    "tiktok": "TikTok",
+    "bilibili": "Bilibili",
+    "douyin": "Douyin",
+    "kwai": "Kwai",
+    "pinterest": "Pinterest",
+    "threads": "Threads"
+  },
+  "aria": {
+    "unbindButton": "Unbind @{{name}}",
+    "closeDialog": "Close"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "title": "Plan & Usage",
+  "currentPlan": "Current Plan",
+  "usage": "Usage Statistics",
+  "upgrade": "Upgrade Plan",
+  "history": "Usage History",
+  "planName": "Plan Name",
+  "planPrice": "Plan Price",
+  "expiresAt": "Expires",
+  "never": "Never",
+  "unlimited": "Unlimited",
+  "used": "Used",
+  "limit": "Limit",
+  "copywriting": "Copywriting",
+  "tts": "Voice Synthesis",
+  "video": "Video Generation",
+  "poster": "Poster Generation",
+  "upgradeNow": "Upgrade Now",
+  "upgradeDesc": "Upgrade to a higher tier to unlock more features and higher usage quotas",
+  "upgradeContact": "For enterprise plans, please contact us",
+  "historyTable": {
+    "date": "Date",
+    "type": "Type",
+    "amount": "Usage",
+    "detail": "Detail",
+    "noRecords": "No usage records yet"
+  },
+  "types": {
+    "copywriting": "Copywriting",
+    "tts": "Voice Synthesis",
+    "video": "Video Generation",
+    "poster": "Poster Generation"
+  },
+  "apiKeys": {
+    "title": "API Key Configuration",
+    "description": "Configure third-party API keys to enable AI features",
+    "configured": "Configured",
+    "notConfigured": "Not Configured",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "toggleVisibility": "Toggle visibility",
+    "placeholder": "Enter {service} API Key",
+    "stripe": "Stripe",
+    "deepseek": "DeepSeek",
+    "openai": "OpenAI",
+    "qwen": "Qwen",
+    "seedance": "Seedance",
+    "wan": "Wan",
+    "libtv": "LibTV"
+  }
+}

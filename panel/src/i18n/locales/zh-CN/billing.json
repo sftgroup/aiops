@@ -1,0 +1,52 @@
+{
+  "title": "套餐与用量",
+  "currentPlan": "当前套餐",
+  "usage": "用量统计",
+  "upgrade": "升级套餐",
+  "history": "用量历史",
+  "planName": "方案名称",
+  "planPrice": "方案价格",
+  "expiresAt": "到期时间",
+  "never": "永不",
+  "unlimited": "不限量",
+  "used": "已用",
+  "limit": "上限",
+  "copywriting": "文案生成",
+  "tts": "语音合成",
+  "video": "视频生成",
+  "poster": "海报生成",
+  "upgradeNow": "立即升级",
+  "upgradeDesc": "升级到更高套餐，解锁更多功能和更高用量配额",
+  "upgradeContact": "如需企业级方案，请联系我们",
+  "historyTable": {
+    "date": "日期",
+    "type": "类型",
+    "amount": "用量",
+    "detail": "详情",
+    "noRecords": "暂无用量记录"
+  },
+  "types": {
+    "copywriting": "文案生成",
+    "tts": "语音合成",
+    "video": "视频生成",
+    "poster": "海报生成"
+  },
+  "apiKeys": {
+    "title": "API Key 配置",
+    "description": "配置第三方服务 API Key 以启用 AI 功能",
+    "configured": "已配置",
+    "notConfigured": "未配置",
+    "save": "保存",
+    "saving": "保存中…",
+    "saved": "已保存",
+    "toggleVisibility": "切换显示",
+    "placeholder": "输入 {service} API Key",
+    "stripe": "Stripe",
+    "deepseek": "DeepSeek",
+    "openai": "OpenAI",
+    "qwen": "通义千问",
+    "seedance": "Seedance",
+    "wan": "万相",
+    "libtv": "LibTV"
+  }
+}

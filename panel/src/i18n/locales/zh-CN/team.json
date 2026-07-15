@@ -1,0 +1,87 @@
+{
+  "empty": {
+    "title": "还没有运营团队",
+    "description": "创建一个运营团队，设定主题和发布时间，系统将自动生成内容并发布到各平台。",
+    "createButton": "+ 创建运营团队"
+  },
+  "schedule": {
+    "statusDone": "✅",
+    "statusRunning": "⏳",
+    "statusPending": "📋",
+    "delayMin": "{min}min"
+  },
+  "teamCard": {
+    "statusRunning": "运行中",
+    "statusPaused": "已暂停",
+    "runNow": "立即执行",
+    "runButton": "▶ 执行",
+    "pauseButton": "⏸ 暂停",
+    "startButton": "▶ 启动",
+    "editButton": "编辑",
+    "duplicateButton": "📋 复制",
+    "deleteButton": "删除",
+    "subjectLabel": "主题",
+    "platformLabel": "平台",
+    "contentLabel": "内容",
+    "contentTextImage": "📝 文案+图片",
+    "contentVideo": "🎬 短视频",
+    "todaySchedule": "今日排程"
+  },
+  "modal": {
+    "createTitle": "创建运营团队",
+    "editTitle": "编辑运营团队",
+    "nameLabel": "团队名称",
+    "namePlaceholder": "如：科技资讯",
+    "subjectLabel": "内容主题",
+    "subjectHint": "用户设定主题，系统自动匹配生成规则",
+    "subjectPlaceholder": "输入主题后按回车",
+    "subjectAddButton": "添加",
+    "contentTypeLabel": "内容类型",
+    "generatePosters": "🎨 生成海报（AI 生成+Logo水印）",
+    "videoModelLabel": "视频模型",
+    "wanTurbo": "WAN 2.1 Turbo — 文生视频（快速）",
+    "wanT2V": "WAN 2.7 T2V — 文生视频",
+    "wanI2V": "WAN 2.7 I2V — 图生视频",
+    "scheduleLabel": "每日发布时间",
+    "scheduleIntervalLabel": "间隔",
+    "scheduleMinuteLabel": "分钟",
+    "scheduleDeleteButton": "删除",
+    "scheduleAddButton": "+ 添加发布时间",
+    "accountLabel": "发布账号",
+    "accountHint": "去重规则：同一天同一主题只按平台各发一次",
+    "accountEmpty": "暂无绑定账号，请先到设置页面绑定",
+    "cancelButton": "取消",
+    "createButton": "创建",
+    "saveButton": "保存"
+  },
+  "page": {
+    "title": "运营团队",
+    "description": "创建内容运营团队，系统按计划自动生成内容并发布到各平台",
+    "execLogs": "⏰ 执行日志",
+    "createTeam": "+ 创建团队"
+  },
+  "confirmDelete": {
+    "title": "删除运营团队",
+    "message": "确定删除「{name}」？删除后无法恢复。",
+    "confirmLabel": "删除"
+  },
+  "toast": {
+    "loadFailed": "加载失败",
+    "saveSuccess": "保存成功",
+    "createSuccess": "创建成功",
+    "operationFailed": "操作失败",
+    "deleteSuccess": "已删除",
+    "deleteFailed": "删除失败",
+    "duplicateSuccess": "已复制",
+    "duplicateFailed": "复制失败",
+    "runTriggered": "已触发执行",
+    "runFailed": "触发失败"
+  },
+  "duplicateSuffix": "(副本)",
+  "platform": {
+    "twitter": "𝕏 Twitter",
+    "youtube": "▶ YouTube",
+    "tiktok": "🎵 TikTok",
+    "bilibili": "📺 Bilibili"
+  }
+}

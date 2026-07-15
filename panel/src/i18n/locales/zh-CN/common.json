@@ -1,0 +1,22 @@
+{
+  "app": {
+    "title": "AIops",
+    "subtitle": "AI 内容运营平台"
+  },
+  "nav": {
+    "overview": "仪表盘",
+    "video": "视频生成",
+    "content": "内容管理",
+    "accounts": "社交账号",
+    "settings": "设置",
+    "team": "团队管理",
+    "voice": "语音合成"
+  },
+  "button": {
+    "logout": "退出登录",
+    "userCenter": "用户中心"
+  },
+  "language": {
+    "switch": "切换语言"
+  }
+}

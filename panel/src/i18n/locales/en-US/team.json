@@ -1,0 +1,84 @@
+{
+  "empty": {
+    "title": "No teams yet",
+    "description": "Create an operations team, set topics and publish times. The system will automatically generate content and publish to each platform.",
+    "createButton": "+ Create Team"
+  },
+  "schedule": {
+    "delayMin": "{min}min"
+  },
+  "teamCard": {
+    "statusRunning": "Running",
+    "statusPaused": "Paused",
+    "runNow": "Run now",
+    "runButton": "▶ Run",
+    "pauseButton": "⏸ Pause",
+    "startButton": "▶ Start",
+    "editButton": "Edit",
+    "duplicateButton": "📋 Copy",
+    "deleteButton": "Delete",
+    "subjectLabel": "Topics",
+    "platformLabel": "Platforms",
+    "contentLabel": "Content",
+    "contentTextImage": "📝 Text+Image",
+    "contentVideo": "🎬 Short Video",
+    "todaySchedule": "Today's Schedule"
+  },
+  "modal": {
+    "createTitle": "Create Team",
+    "editTitle": "Edit Team",
+    "nameLabel": "Team Name",
+    "namePlaceholder": "e.g. Tech News",
+    "subjectLabel": "Content Topics",
+    "subjectHint": "Set topics, the system will auto-match generation rules",
+    "subjectPlaceholder": "Type a topic and press Enter",
+    "subjectAddButton": "Add",
+    "contentTypeLabel": "Content Type",
+    "generatePosters": "🎨 Generate Posters (AI + Logo Watermark)",
+    "videoModelLabel": "Video Model",
+    "wanTurbo": "WAN 2.1 Turbo — T2V (Fast)",
+    "wanT2V": "WAN 2.7 T2V — Text-to-Video",
+    "wanI2V": "WAN 2.7 I2V — Image-to-Video",
+    "scheduleLabel": "Daily Publish Time",
+    "scheduleIntervalLabel": "Interval",
+    "scheduleMinuteLabel": "min",
+    "scheduleDeleteButton": "Delete",
+    "scheduleAddButton": "+ Add Publish Time",
+    "accountLabel": "Publish Accounts",
+    "accountHint": "Dedup: only publish once per platform per topic per day",
+    "accountEmpty": "No accounts bound yet. Please bind accounts in Settings first.",
+    "cancelButton": "Cancel",
+    "createButton": "Create",
+    "saveButton": "Save"
+  },
+  "page": {
+    "title": "Teams",
+    "description": "Create content operation teams. The system will automatically generate content and publish to platforms on schedule.",
+    "execLogs": "⏰ Execution Logs",
+    "createTeam": "+ Create Team"
+  },
+  "confirmDelete": {
+    "title": "Delete Team",
+    "message": "Are you sure you want to delete \"{name}\"? This action cannot be undone.",
+    "confirmLabel": "Delete"
+  },
+  "toast": {
+    "loadFailed": "Failed to load",
+    "saveSuccess": "Saved successfully",
+    "createSuccess": "Created successfully",
+    "operationFailed": "Operation failed",
+    "deleteSuccess": "Deleted successfully",
+    "deleteFailed": "Failed to delete",
+    "duplicateSuccess": "Duplicated successfully",
+    "duplicateFailed": "Failed to duplicate",
+    "runTriggered": "Execution triggered",
+    "runFailed": "Failed to trigger"
+  },
+  "duplicateSuffix": "(Copy)",
+  "platform": {
+    "twitter": "𝕏 Twitter",
+    "youtube": "▶ YouTube",
+    "tiktok": "🎵 TikTok",
+    "bilibili": "📺 Bilibili"
+  }
+}

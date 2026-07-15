@@ -1,0 +1,60 @@
+{
+  "title": "账号管理",
+  "bind": "绑定 {{platform}}",
+  "bindAnother": "+ 绑定另一个",
+  "boundOn": "{{date}} 绑定",
+  "unbind": "解除绑定",
+  "unbindConfirm": "确定解除绑定「{{name}}」？",
+  "unbindTitle": "解除账号绑定",
+  "unbindSuccess": "已解除绑定 {{name}}",
+  "unbindFailed": "解除绑定失败",
+  "confirmUnbind": "解除绑定",
+  "comingSoon": "即将支持",
+  "oauthPinMode": "OAuth 1.0a PIN 模式",
+  "oauthPkce": "OAuth 2.0 PKCE",
+  "bindTwitter": "Twitter 账号绑定成功！",
+  "bindSuccess": "{{platform}} 绑定成功！",
+  "getAuthLink": "获取授权链接",
+  "getAuthLinkFailed": "获取授权链接失败",
+  "getOAuthLinkFailed": "获取 {{platform}} 授权链接失败",
+  "openAuthPage": "点击此处打开（已弹窗）",
+  "step1": "第 1 步：打开 Twitter 授权页面",
+  "step2": "第 2 步：输入 PIN 码",
+  "pinCodePlaceholder": "输入 7 位 PIN 码...",
+  "pinCodeLabel": "PIN 码",
+  "confirmBind": "确认绑定",
+  "bindFailed": "绑定失败，请重试",
+  "processing": "处理中...",
+  "bindSuccessTitle": "绑定成功！",
+  "bindDialogTitle": "绑定 Twitter 账号",
+  "authDescription": "点击下方按钮，获取 Twitter 授权链接",
+  "enterPin": "请输入 PIN 码",
+  "close": "关闭",
+  "button": {
+    "bind": "绑定",
+    "unbind": "解除绑定"
+  },
+  "error": {
+    "expired": "授权已过期，请重试",
+    "missing_params": "回调参数不完整",
+    "token_exchange_failed": "获取 Token 失败",
+    "invalid_state": "无效的授权状态，请重试",
+    "unknown": "授权失败: {{error}}"
+  },
+  "platform": {
+    "twitter": "Twitter/X",
+    "youtube": "YouTube",
+    "meta": "Facebook / Instagram",
+    "reddit": "Reddit",
+    "tiktok": "TikTok",
+    "bilibili": "B站",
+    "douyin": "抖音",
+    "kwai": "快手",
+    "pinterest": "Pinterest",
+    "threads": "Threads"
+  },
+  "aria": {
+    "unbindButton": "解除绑定 @{{name}}",
+    "closeDialog": "关闭"
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "title": "设置",
+  "loading": "加载中...",
+  "tabs": {
+    "profile": "个人信息",
+    "billing": "套餐与账单",
+    "team": "团队管理",
+    "history": "使用历史",
+    "security": "安全设置"
+  },
+  "profile": {
+    "personalInfo": "个人信息",
+    "name": "姓名",
+    "email": "邮箱",
+    "save": "保存修改",
+    "wallet": "钱包地址",
+    "noWallet": "未连接钱包",
+    "bindTitle": "绑定邮箱和密码",
+    "bindDesc": "钱包登录后，可设置邮箱和密码以支持传统登录方式",
+    "bindBtn": "设置邮箱密码",
+    "bindConfirm": "确认绑定",
+    "emailPlaceholder": "your@email.com",
+    "newPassword": "新密码",
+    "confirmPassword": "确认密码",
+    "changePassword": "修改密码",
+    "currentPassword": "当前密码",
+    "updatePassword": "更新密码",
+    "cancel": "取消",
+    "dangerZone": "危险操作",
+    "dangerDesc": "永久删除你的账号和所有数据，此操作不可撤销。",
+    "deleteAccount": "删除账号",
+    "deleteConfirm": "输入密码确认删除",
+    "confirmDelete": "确认删除",
+    "connectWallet": "连接钱包"
+  },
+  "billing": {
+    "plan": "套餐",
+    "usageStats": "用量统计",
+    "copywriting": "文案生成",
+    "voice": "语音合成",
+    "video": "视频生成",
+    "poster": "海报生成",
+    "upgradePlan": "升级套餐",
+    "upgrade": "立即升级",
+    "currentPlan": "当前套餐",
+    "contact": "联系客服",
+    "plans": {
+      "free": {
+        "name": "免费版",
+        "price": "0 USDC",
+        "f1": "50 次/月 AI 生成",
+        "f2": "基础文案模板",
+        "f3": "标准 TTS 语音",
+        "f4": "社区支持"
+      },
+      "starter": {
+        "name": "入门版",
+        "price": "2,999 USDC",
+        "f1": "200 次/月 AI 生成",
+        "f2": "高级模板",
+        "f3": "全部 TTS 音色",
+        "f4": "邮件支持"
+      },
+      "pro": {
+        "name": "专业版",
+        "price": "9,999 USDC",
+        "f1": "1,000 次/月 AI 生成",
+        "f2": "全部模板 + TTS",
+        "f3": "AI 海报 + 视频",
+        "f4": "优先支持"
+      },
+      "enterprise": {
+        "name": "企业版",
+        "price": "49,999 USDC",
+        "f1": "5,000 次/月 AI 生成",
+        "f2": "自定义模型训练",
+        "f3": "定制部署",
+        "f4": "专属支持"
+      }
+    }
+  },
+  "history": {
+    "usageTitle": "使用记录",
+    "date": "日期",
+    "copywriting": "文案生成",
+    "tts": "语音合成",
+    "poster": "海报生成",
+    "video": "视频生成",
+    "publish": "平台发布",
+    "noData": "暂无使用记录"
+  },
+  "team": {
+    "title": "团队成员",
+    "invite": "邀请",
+    "emailPlaceholder": "邮箱地址",
+    "sendInvite": "发送邀请",
+    "cancel": "取消",
+    "member": "成员",
+    "role": "角色",
+    "status": "状态",
+    "action": "操作",
+    "remove": "移除",
+    "roles": {
+      "owner": "拥有者",
+      "admin": "管理员",
+      "editor": "编辑者",
+      "reviewer": "审核者",
+      "viewer": "观察者"
+    },
+    "statuses": {
+      "active": "已激活",
+      "invited": "已邀请"
+    }
+  },
+  "toast": {
+    "profileUpdated": "个人信息已更新",
+    "pwChanged": "密码已修改",
+    "pwMismatch": "两次密码不一致",
+    "bindSuccess": "邮箱密码绑定成功",
+    "invited": "已发送邀请",
+    "memberRemoved": "已移除成员",
+    "failed": "操作失败",
+    "bindWalletSuccess": "钱包绑定成功",
+    "noWallet": "未检测到钱包插件，请安装 MetaMask"
+  }
+}

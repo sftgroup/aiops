@@ -1,0 +1,126 @@
+{
+  "title": "Settings",
+  "loading": "Loading...",
+  "tabs": {
+    "profile": "Profile",
+    "billing": "Billing",
+    "team": "Team",
+    "history": "History",
+    "security": "Security"
+  },
+  "profile": {
+    "personalInfo": "Personal Info",
+    "name": "Name",
+    "email": "Email",
+    "save": "Save Changes",
+    "wallet": "Wallet",
+    "noWallet": "Not connected",
+    "bindTitle": "Set Email & Password",
+    "bindDesc": "After wallet login, set up email and password for traditional login.",
+    "bindBtn": "Set Email & Password",
+    "bindConfirm": "Confirm",
+    "emailPlaceholder": "your@email.com",
+    "newPassword": "New Password",
+    "confirmPassword": "Confirm Password",
+    "changePassword": "Change Password",
+    "currentPassword": "Current Password",
+    "updatePassword": "Update Password",
+    "cancel": "Cancel",
+    "dangerZone": "Danger Zone",
+    "dangerDesc": "Permanently delete your account and all data. This cannot be undone.",
+    "deleteAccount": "Delete Account",
+    "deleteConfirm": "Enter password to confirm",
+    "confirmDelete": "Confirm Delete",
+    "connectWallet": "Connect Wallet"
+  },
+  "billing": {
+    "plan": "Plan",
+    "usageStats": "Usage Statistics",
+    "copywriting": "Copywriting",
+    "voice": "Voice Synthesis",
+    "video": "Video Generation",
+    "poster": "Poster Generation",
+    "upgradePlan": "Upgrade Plan",
+    "upgrade": "Upgrade Now",
+    "currentPlan": "Current Plan",
+    "contact": "Contact Us",
+    "plans": {
+      "free": {
+        "name": "Free",
+        "price": "0 USDC",
+        "f1": "50 AI generations/month",
+        "f2": "Basic templates",
+        "f3": "Standard TTS",
+        "f4": "Community support"
+      },
+      "starter": {
+        "name": "Starter",
+        "price": "2,999 USDC",
+        "f1": "200 AI generations/month",
+        "f2": "Advanced templates",
+        "f3": "All TTS voices",
+        "f4": "Email support"
+      },
+      "pro": {
+        "name": "Pro",
+        "price": "9,999 USDC",
+        "f1": "1,000 AI generations/month",
+        "f2": "All templates + TTS",
+        "f3": "AI poster + video",
+        "f4": "Priority support"
+      },
+      "enterprise": {
+        "name": "Enterprise",
+        "price": "49,999 USDC",
+        "f1": "5,000 AI generations/month",
+        "f2": "Custom training",
+        "f3": "Custom deployment",
+        "f4": "Dedicated support"
+      }
+    }
+  },
+  "history": {
+    "usageTitle": "Usage History",
+    "date": "Date",
+    "copywriting": "Copywriting",
+    "tts": "Voice Synthesis",
+    "poster": "Posters",
+    "video": "Videos",
+    "publish": "Publishing",
+    "noData": "No usage records yet"
+  },
+  "team": {
+    "title": "Team Members",
+    "invite": "Invite",
+    "emailPlaceholder": "Email",
+    "sendInvite": "Send Invite",
+    "cancel": "Cancel",
+    "member": "Member",
+    "role": "Role",
+    "status": "Status",
+    "action": "Action",
+    "remove": "Remove",
+    "roles": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "editor": "Editor",
+      "reviewer": "Reviewer",
+      "viewer": "Viewer"
+    },
+    "statuses": {
+      "active": "Active",
+      "invited": "Invited"
+    }
+  },
+  "toast": {
+    "profileUpdated": "Profile updated",
+    "pwChanged": "Password changed",
+    "pwMismatch": "Passwords do not match",
+    "bindSuccess": "Email & password set successfully",
+    "invited": "Invitation sent",
+    "memberRemoved": "Member removed",
+    "failed": "Operation failed",
+    "bindWalletSuccess": "Wallet connected",
+    "noWallet": "No wallet detected. Please install MetaMask."
+  }
+}

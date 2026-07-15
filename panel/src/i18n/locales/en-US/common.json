@@ -1,0 +1,22 @@
+{
+  "app": {
+    "title": "AIops",
+    "subtitle": "AI Content Operations Platform"
+  },
+  "nav": {
+    "overview": "Dashboard",
+    "video": "Video",
+    "content": "Content",
+    "accounts": "Social Accounts",
+    "settings": "Settings",
+    "team": "Team",
+    "voice": "Voice"
+  },
+  "button": {
+    "logout": "Logout",
+    "userCenter": "User Center"
+  },
+  "language": {
+    "switch": "Switch Language"
+  }
+}

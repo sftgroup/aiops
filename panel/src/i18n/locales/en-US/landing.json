@@ -1,0 +1,99 @@
+{
+  "hero": {
+    "title": "AI Content Platform",
+    "subtitle": "From copy to video, full-chain AI creation tools",
+    "tagline": "Smart copywriting, voice, video, posters — One-stop AI content platform, 10x faster creative delivery",
+    "ctaTrial": "Free Trial",
+    "ctaPricing": "View Pricing"
+  },
+  "nav": {
+    "features": "Features",
+    "pricing": "Pricing",
+    "login": "Login",
+    "register": "Register"
+  },
+  "features": {
+    "title": "Core Capabilities",
+    "subtitle": "Covering the full content production chain, from idea to finished product in one step",
+    "copywriting": {
+      "title": "AI Copywriting",
+      "desc": "Smart generation of articles, social media posts, and marketing copy. Multi-platform adaptation with one-click export"
+    },
+    "tts": {
+      "title": "TTS Voice Synthesis",
+      "desc": "300+ realistic voices available, multi-language support, professional-grade text-to-speech quality"
+    },
+    "video": {
+      "title": "AI Video Generation",
+      "desc": "Turn copy into short videos with massive content library + AI digital avatars, perfect for social media distribution"
+    },
+    "poster": {
+      "title": "AI Poster Generation",
+      "desc": "Auto-generate marketing posters from descriptions, massive templates + AI design, customizable brand styles"
+    }
+  },
+  "stats": {
+    "title": "Our Achievements",
+    "users": "Registered Users",
+    "teams": "Enterprise Teams",
+    "daily": "Daily Content",
+    "rating": "User Rating"
+  },
+  "pricing": {
+    "title": "Flexible Pricing",
+    "subtitle": "From individual creators to large teams, there's a plan for everyone",
+    "free": { "name": "Free", "price": "0 USDC", "desc": "Personal exploration", "cta": "Get Started" },
+    "starter": { "name": "Starter", "price": "2,999 USDC", "desc": "Professional creators", "cta": "Upgrade Now", "badge": "Most Popular" },
+    "pro": { "name": "Pro", "price": "9,999 USDC", "desc": "Small & mid teams", "cta": "Try Now" },
+    "enterprise": { "name": "Enterprise", "price": "49,999 USDC", "desc": "Large enterprises", "cta": "Contact Us" }
+  },
+  "pricingFeatures": {
+    "free": [
+      "10,000 tokens/month",
+      "50 AI generations/month",
+      "10 TTS syntheses/month",
+      "1 video/month",
+      "Basic copy templates",
+      "Standard TTS voices",
+      "Basic analytics dashboard"
+    ],
+    "starter": [
+      "100,000 tokens/month",
+      "200 AI generations/month",
+      "50 TTS syntheses/month",
+      "10 videos/month",
+      "Advanced copy templates",
+      "All TTS voices",
+      "AI poster generation",
+      "Priority support"
+    ],
+    "pro": [
+      "500,000 tokens/month",
+      "1,000 AI generations/month",
+      "200 TTS syntheses/month",
+      "50 videos/month",
+      "Team collaboration space",
+      "AI video generation (1080p)",
+      "Brand custom templates",
+      "API access",
+      "Dedicated account manager"
+    ],
+    "enterprise": [
+      "2,000,000 tokens/month",
+      "5,000 AI generations/month",
+      "1,000 TTS syntheses/month",
+      "200 videos/month",
+      "Private deployment",
+      "Custom model training",
+      "Dedicated API channel",
+      "SLA guarantee",
+      "7×24 support"
+    ]
+  },
+  "footer": {
+    "copyright": "© 2026 Aiops. All rights reserved.",
+    "github": "GitHub",
+    "contact": "Contact Us",
+    "description": "AI Content Operations Platform — From copywriting to video, AI-powered end-to-end content creation tools for creators and enterprises."
+  }
+}
