@@ -14,6 +14,68 @@ router.use(authenticate)
 // ── LLM Gateway (used by AgentLoop) ──────────────────────────────────
 router.post('/chat', agentChatProxy)
 
+// ── YAML/JSON Workflow (must be BEFORE /:id routes to avoid param conflict) ─
+
+router.post('/workflow/run', async (req, res) => {
+  try {
+    const { workflow, variables } = req.body
+    if (!workflow || !workflow.steps || !Array.isArray(workflow.steps)) {
+      return res.status(400).json({ error: 'workflow.steps array is required' })
+    }
+
+    const { runWorkflow } = require('../../agent-bridge/workflow-executor.js')
+
+    const result = await runWorkflow(workflow, {
+      baseUrl: `${req.protocol}://${req.get('host')}`,
+      apiKey: req.headers['x-api-key'] || '',
+      accessToken: req.headers.authorization?.replace('Bearer ', '') || '',
+      variables: variables || {},
+    })
+
+    // Record as agent execution if agentId is provided and valid
+    if (req.query.agentId) {
+      store.recordExecution(req.query.agentId, req.user.userId, {
+        input: { workflow: workflow.name, variables },
+        output: result,
+        iterations: result.stepResults.length,
+        durationMs: result.totalDurationMs,
+        tokensUsed: 0,
+        status: result.status === 'success' ? 'completed' : result.status,
+      }).catch(() => {})
+    }
+
+    res.json(result)
+  } catch (err) {
+    console.error('[agents] workflow run error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.get('/workflow/presets', (req, res) => {
+  try {
+    const { PRESET_WORKFLOWS, EMPTY_WORKFLOW_TEMPLATE } = require('../../agent-bridge/workflow-executor.js')
+    res.json({ presets: PRESET_WORKFLOWS, template: EMPTY_WORKFLOW_TEMPLATE })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── Marketplace (public search) ──
+router.get('/marketplace/search', async (req, res) => {
+  try {
+    const { keyword, category, page, pageSize, sortBy } = req.query
+    const result = await store.searchMarketplace({
+      keyword, category,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20,
+      sortBy,
+    })
+    res.json(result)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ── Agent CRUD ───────────────────────────────────────────────────────
 
 /**
@@ -187,27 +249,6 @@ router.post('/:id/clone', async (req, res) => {
     const agent = await store.cloneAgent(req.user.tenantId, req.params.id)
     if (!agent) return res.status(404).json({ error: 'Agent not found or not published' })
     res.status(201).json(agent)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// ── Marketplace (public search — uses tenant scope via agent's tenantId) ──
-
-/**
- * GET /api/agents/marketplace/search — Search published agents
- */
-router.get('/marketplace/search', async (req, res) => {
-  try {
-    const { keyword, category, page, pageSize, sortBy } = req.query
-    const result = await store.searchMarketplace({
-      keyword,
-      category,
-      page: parseInt(page) || 1,
-      pageSize: parseInt(pageSize) || 20,
-      sortBy,
-    })
-    res.json(result)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
