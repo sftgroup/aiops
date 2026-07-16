@@ -91,10 +91,15 @@ app.use('/api/tts/audio', express.static('/tmp/aiops-tts'));
 app.use('/api/posters', express.static('/tmp/aiops-posters'));
 app.use('/api/videos', express.static('/tmp/aiops-videos'));
 
+// ── Agent Routes (AIOps × AgentX) ─────────────────────────────
+const agentsRoutes = require('./routes/agents');
+
 // ── Routes ────────────────────────────────────────────────────
 app.use('/api/publish', publishRoutes);
 app.use('/api/accounts', accountsRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/agent', agentsRoutes);
+app.use('/api/agents', agentsRoutes);
 app.use('/api/file', fileProxyRoutes);
 app.use('/api/profile', profileRoutes);
 // Password change shortcut (compatibility alias)

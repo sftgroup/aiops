@@ -31,6 +31,7 @@ model Tenant {
   teams         Team[]
   settingsObj   Setting[]
   auditLogs     AuditLog[]
+  agents        AgentDefinition[]
 
   @@map("tenants")
 }
@@ -310,4 +311,84 @@ model Plan {
   subscriptions Subscription[]
 
   @@map("plans")
+}
+
+// ── Agent Models (AIOps × AgentX) ────────────────────────────────
+
+model AgentDefinition {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String   @db.VarChar(255)
+  description String   @default("") @db.Text
+  version     String   @default("1.0.0") @db.VarChar(20)
+  prompt      String   @db.Text
+  skillList   Json     @default("[]") @map("skill_list")
+  pricing     Json     @default("{}")
+  tags        String[] @default([])
+  status      String   @default("draft") @db.VarChar(20)
+  usageCount  Int      @default(0) @map("usage_count")
+  rating      Float    @default(0)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id])
+  skills      AgentSkill[]
+  executions  AgentExecution[]
+  publication AgentPublication?
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("agent_definitions")
+}
+
+model AgentSkill {
+  id             String @id @default(uuid()) @db.Uuid
+  agentId        String @map("agent_id") @db.Uuid
+  name           String @db.VarChar(100)
+  description    String @default("") @db.Text
+  inputSchema    Json   @default("{}") @map("input_schema")
+  outputSchema   Json   @default("{}") @map("output_schema")
+  executionType  String @default("open") @map("execution_type") @db.VarChar(20)
+  executionConfig Json  @default("{}") @map("execution_config")
+
+  agent          AgentDefinition @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, name])
+  @@map("agent_skills")
+}
+
+model AgentExecution {
+  id          String   @id @default(uuid()) @db.Uuid
+  agentId     String   @map("agent_id") @db.Uuid
+  userId      String?  @map("user_id") @db.Uuid
+  input       Json     @default("{}")
+  output      Json     @default("{}")
+  iterations  Int      @default(0)
+  durationMs  Int      @default(0) @map("duration_ms")
+  tokensUsed  Int      @default(0) @map("tokens_used")
+  status      String   @default("running") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  agent       AgentDefinition @relation(fields: [agentId], references: [id])
+
+  @@index([agentId])
+  @@index([userId])
+  @@map("agent_executions")
+}
+
+model AgentPublication {
+  id        String   @id @default(uuid()) @db.Uuid
+  agentId   String   @unique @map("agent_id") @db.Uuid
+  public    Boolean  @default(false)
+  featured  Boolean  @default(false)
+  category  String   @default("general") @db.VarChar(50)
+  price     Float    @default(0)
+  downloads Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  agent     AgentDefinition @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([category])
+  @@index([public])
+  @@map("agent_publications")
 }

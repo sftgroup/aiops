@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../AuthContext';
-import { LayoutDashboard, Video, FileText, Users, Settings, LogOut, Mic, Globe, User, Wallet } from 'lucide-react';
+import { LayoutDashboard, Video, FileText, Users, Settings, LogOut, Mic, Globe, User, Wallet, Bot, Store } from 'lucide-react';
 import { SUPPORTED_LANGS } from '../i18n';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -28,6 +28,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { to: '/videos', icon: Video, key: 'nav.video' as const },
     { to: '/content', icon: FileText, key: 'nav.content' as const },
     { to: '/voice', icon: Mic, key: 'nav.voice' as const },
+    { to: '/agents', icon: Bot, key: 'Agents' as const },
+    { to: '/marketplace', icon: Store, key: 'Marketplace' as const },
     { to: '/accounts', icon: Users, key: 'nav.accounts' as const },
     { to: '/settings', icon: Settings, key: 'nav.settings' as const },
   ];

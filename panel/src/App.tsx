@@ -14,6 +14,8 @@ import TeamWorkflowPage from './pages/TeamWorkflowPage';
 import VideoPage from './pages/VideoPage';
 import TtsPage from './pages/TtsPage';
 import SettingsPage from './pages/SettingsPage';
+import AgentBuilderPage from './pages/AgentBuilderPage';
+import MarketplacePage from './pages/MarketplacePage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // ── Operator pages ──
@@ -64,6 +66,8 @@ export default function App() {
           <Route path="/voice" element={<ProtectedLayout element={<TtsPage />} />} />
           <Route path="/settings" element={<ProtectedLayout element={<SettingsPage />} />} />
           <Route path="/settings/*" element={<ProtectedLayout element={<SettingsPage />} />} />
+          <Route path="/agents" element={<ProtectedLayout element={<AgentBuilderPage />} />} />
+          <Route path="/marketplace" element={<ProtectedLayout element={<MarketplacePage />} />} />
 
           {/* ── Operator routes ── */}
           <Route path="/operator/login" element={<OperatorLoginPage />} />
