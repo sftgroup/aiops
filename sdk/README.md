@@ -39,6 +39,8 @@ const client = new AIOpsClient({
 });
 ```
 
+---
+
 ## API 参考
 
 ### 1. Content — 文案生成
@@ -143,6 +145,88 @@ const trend    = await client.dashboard.trend(30);
 const quota    = await client.dashboard.quota();
 ```
 
+---
+
+## Agent API（新增）
+
+通过 SDK 创建和管理 AI Agent，支持 ReAct 模式和 YAML 工作流。
+
+### Agents — CRUD + 执行
+
+| 方法 | 说明 |
+|------|------|
+| `agents.list()` | 列出我的 Agent |
+| `agents.create(data)` | 创建 Agent |
+| `agents.get(id)` | 获取 Agent 详情 |
+| `agents.update(id, data)` | 更新 Agent |
+| `agents.delete(id)` | 删除 Agent |
+| `agents.run(id, message)` | **ReAct 执行 Agent** |
+| `agents.publish(id, opts?)` | 发布到市场 |
+| `agents.clone(id)` | Clone 市场 Agent |
+| `agents.executions(id)` | 获取执行历史 |
+
+```typescript
+// 创建 Agent
+const agent = await client.agents.create({
+  name: "Twitter Auto Poster",
+  description: "Automatically generates Twitter posts",
+  prompt: "You are a social media expert...",
+  skillNames: ["aiops_content_generate", "aiops_quota_check"],
+  tags: ["twitter", "social-media"],
+});
+
+// ReAct 执行
+const result = await client.agents.run(agent.id, "Write 3 tweets about AI trends");
+console.log(result.finalText);
+// result.toolCalls — LLM 调用了哪些工具
+// result.totalIterations — 推理了几轮
+// result.usage.totalTokens — 用了多少 token
+
+// 发布到市场
+await client.agents.publish(agent.id, { category: "social-media" });
+
+// Clone 别人的 Agent
+const cloned = await client.agents.clone(otherAgentId);
+```
+
+### Workflows — 显式编排
+
+| 方法 | 说明 |
+|------|------|
+| `agents.runWorkflow(workflow, variables?)` | 执行 JSON 工作流 |
+| `agents.getWorkflowPresets()` | 获取预设模板 |
+
+```typescript
+const result = await client.agents.runWorkflow(
+  {
+    name: "Twitter Auto Poster",
+    steps: [
+      { id: "tweet", tool: "aiops_content_generate", params: { topic: "{{ inputs.topic }}", platform: "twitter" } },
+      { id: "quota", tool: "aiops_quota_check", condition: "{{ steps.tweet.id }}" },
+    ],
+  },
+  { topic: "AI automation" }
+);
+
+console.log(result.status); // "success" | "partial" | "failed"
+for (const step of result.stepResults) {
+  console.log(`${step.stepId}: ${step.status} (${step.durationMs}ms)`);
+}
+```
+
+### Marketplace — 市场
+
+```typescript
+// 搜索市场
+const market = await client.agents.searchMarketplace({
+  keyword: "twitter",
+  category: "social-media",
+  sortBy: "popular",
+});
+```
+
+---
+
 ## 错误处理
 
 SDK 所有错误统一为 `AIOpsError`，包含 `code`、`status`、`message`、`details` 字段。
@@ -167,6 +251,8 @@ try {
 | 网络异常 | `NETWORK_ERROR` | 0 |
 | 构造函数缺少认证 | `MISSING_AUTH` | 0 |
 
+---
+
 ## 测试状态
 
 > ✅ **全部通过 — 单元 56/56 + 集成 41/41**
@@ -175,6 +261,21 @@ try {
 |----------|--------|------|
 | 单元测试 (tsx tests/sdk.test.ts) | 56 | ✅ 0 失败 |
 | 集成测试 (full-test.mjs vs 43.156.50.6:5290) | 41 | ✅ 0 失败 |
+
+---
+
+## API 方法速查表
+
+| 模块 | 方法数 | 方法列表 |
+|------|--------|----------|
+| `client.content` | 4 | `generate`, `list`, `platforms`, `styles` |
+| `client.tts` | 5 | `synthesize`, `getVoices`, `translate`, `optimize`, `recommendVoice` |
+| `client.quota` | 1 | `get` |
+| `client.media` | 7 | `generateVideo`, `getVideoStatus`, `generatePoster`, `getPosterStatus`, `getPosterModels`, `getPosterSizes`, `getPosterStyles` |
+| `client.dashboard` | 3 | `overview`, `trend`, `quota` |
+| `client.agents` | 10 | `list`, `create`, `get`, `update`, `delete`, `run`, `publish`, `clone`, `executions`, `searchMarketplace` |
+| `client.workflows` | 2 | `runWorkflow`, `getPresets` |
+| **合计** | **32** | |
 
 ## License
 
