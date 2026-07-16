@@ -126,13 +126,7 @@ app.use('/api/billing', billingRoutes);
 app._cryptoOrders = billingRoutes._cryptoOrders;
 app.use('/api/oauth', oauthRoutes);
 
-// Operator SPA — static files + fallback
-app.use('/operator', express.static(path.join(__dirname, '..', 'panel', 'dist', 'operator')));
-app.get(/^\/operator(?:\/.*)?$/, (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'panel', 'dist', 'operator', 'index.html'));
-});
-
-// ── SPA (panel/dist) ─────────────────────────────────────────
+// ── SPA (panel/dist — handles all frontend routes including /operator/*) ──
 app.use(express.static(path.join(__dirname, '..', 'panel', 'dist')));
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
