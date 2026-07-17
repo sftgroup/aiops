@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>套餐与用量 - Aiops</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .progress-bar { transition: width 0.6s ease; }
+</style>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        dark: { bg: '#0f0f1a', card: '#1a1a2e', border: '#2a2a3e', hover: '#252540' },
+        accent: { primary: '#6366f1', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444' },
+      }
+    }
+  }
+}
+</script>
+</head>
+<body class="bg-dark-bg text-gray-300 min-h-screen">
+
+<!-- Top Bar -->
+<nav class="border-b border-dark-border bg-dark-card/80 backdrop-blur-sm sticky top-0 z-50">
+  <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">🚀</span>
+      <span class="font-bold text-white">Aiops</span>
+    </div>
+    <div class="flex items-center gap-4 text-sm">
+      <a href="#" class="text-gray-400 hover:text-white transition-colors">工作台</a>
+      <a href="#" class="text-gray-400 hover:text-white transition-colors">项目</a>
+      <span class="text-accent-primary font-medium">套餐用量</span>
+      <div class="w-8 h-8 rounded-full bg-accent-primary flex items-center justify-center text-xs font-bold">U</div>
+    </div>
+  </div>
+</nav>
+
+<div class="max-w-6xl mx-auto px-6 py-8">
+  <h1 class="text-2xl font-bold text-white mb-2">💳 套餐与用量</h1>
+  <p class="text-gray-500 text-sm mb-8">管理您的套餐计划和资源使用情况</p>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Plan Card -->
+    <div class="lg:col-span-1 space-y-6">
+      <div class="bg-dark-card border border-dark-border rounded-lg p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-white font-semibold text-lg">当前套餐</h2>
+          <span class="px-2.5 py-0.5 bg-accent-primary/10 text-accent-primary text-xs rounded-full font-medium">活跃</span>
+        </div>
+        <div class="text-3xl font-bold text-white mb-1">Pro</div>
+        <div class="text-gray-500 text-sm mb-4">专业创作者套餐</div>
+        <div class="space-y-2 text-sm text-gray-400 mb-6">
+          <div class="flex justify-between"><span>订阅周期</span><span class="text-gray-300">月度</span></div>
+          <div class="flex justify-between"><span>价格</span><span class="text-gray-300">¥99 / 月</span></div>
+          <div class="flex justify-between"><span>开始日期</span><span class="text-gray-300">2026-06-01</span></div>
+          <div class="flex justify-between"><span>下次续费</span><span class="text-gray-300">2026-07-01</span></div>
+          <div class="flex justify-between"><span>支付方式</span><span class="text-gray-300">微信支付</span></div>
+        </div>
+        <button class="w-full py-2.5 bg-accent-primary text-white font-semibold rounded-lg hover:opacity-90 transition-colors text-sm">
+          ⬆️ 升级到 Team
+        </button>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="bg-dark-card border border-dark-border rounded-lg p-6">
+        <h3 class="text-white font-semibold mb-4">快速操作</h3>
+        <div class="space-y-3">
+          <a href="#" class="flex items-center gap-3 p-3 rounded-lg hover:bg-dark-hover transition-colors text-sm">
+            <span>📜</span> 查看历史账单
+          </a>
+          <a href="#" class="flex items-center gap-3 p-3 rounded-lg hover:bg-dark-hover transition-colors text-sm">
+            <span>💳</span> 管理支付方式
+          </a>
+          <a href="#" class="flex items-center gap-3 p-3 rounded-lg hover:bg-dark-hover transition-colors text-sm">
+            <span>📧</span> 联系销售
+          </a>
+          <a href="#" class="flex items-center gap-3 p-3 rounded-lg hover:bg-dark-hover transition-colors text-sm text-accent-danger">
+            <span>❌</span> 取消订阅
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Usage Section -->
+    <div class="lg:col-span-2">
+      <div class="bg-dark-card border border-dark-border rounded-lg p-6">
+        <h2 class="text-white font-semibold text-lg mb-1">📊 本月用量</h2>
+        <p class="text-gray-500 text-sm mb-6">重置时间：2026-07-01 · 剩余 5 天</p>
+
+        <div class="space-y-6">
+          <!-- Copywriting -->
+          <div>
+            <div class="flex justify-between mb-2">
+              <span class="text-sm text-gray-300">🤖 AI 文案生成</span>
+              <span class="text-sm text-gray-400 font-mono">850 / 不限</span>
+            </div>
+            <div class="w-full bg-dark-bg rounded-full h-3 overflow-hidden">
+              <div class="progress-bar h-full rounded-full bg-accent-success" style="width:100%"></div>
+            </div>
+            <p class="text-xs text-gray-600 mt-1">Pro 套餐：无限次数</p>
+          </div>
+
+          <!-- TTS -->
+          <div>
+            <div class="flex justify-between mb-2">
+              <span class="text-sm text-gray-300">🎙️ TTS 语音合成</span>
+              <span class="text-sm font-mono"><span class="text-accent-warning font-semibold">87</span><span class="text-gray-400"> / 100</span></span>
+            </div>
+            <div class="w-full bg-dark-bg rounded-full h-3 overflow-hidden">
+              <div class="progress-bar h-full rounded-full bg-accent-warning" style="width:87%"></div>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">已使用 87% · 剩余 13 次</p>
+          </div>
+
+          <!-- Video -->
+          <div>
+            <div class="flex justify-between mb-2">
+              <span class="text-sm text-gray-300">🎬 AI 视频生成</span>
+              <span class="text-sm font-mono"><span class="text-accent-danger font-semibold">48</span><span class="text-gray-400"> / 50</span></span>
+            </div>
+            <div class="w-full bg-dark-bg rounded-full h-3 overflow-hidden">
+              <div class="progress-bar h-full rounded-full bg-accent-danger" style="width:96%"></div>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">⚠️ 已使用 96% · 剩余 2 次</p>
+          </div>
+
+          <!-- Poster -->
+          <div>
+            <div class="flex justify-between mb-2">
+              <span class="text-sm text-gray-300">🎨 AI 海报生成</span>
+              <span class="text-sm font-mono"><span class="text-gray-300">32</span><span class="text-gray-400"> / 100</span></span>
+            </div>
+            <div class="w-full bg-dark-bg rounded-full h-3 overflow-hidden">
+              <div class="progress-bar h-full rounded-full bg-accent-primary" style="width:32%"></div>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">已使用 32% · 剩余 68 次</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Combined Stats -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
+        <div class="bg-dark-card border border-dark-border rounded-lg p-4 text-center">
+          <span class="text-2xl block mb-1">🤖</span>
+          <div class="text-xl font-bold text-white">850</div>
+          <div class="text-xs text-gray-500">文案生成</div>
+        </div>
+        <div class="bg-dark-card border border-dark-border rounded-lg p-4 text-center">
+          <span class="text-2xl block mb-1">🎙️</span>
+          <div class="text-xl font-bold text-accent-warning">87</div>
+          <div class="text-xs text-gray-500">TTS 合成</div>
+        </div>
+        <div class="bg-dark-card border border-dark-border rounded-lg p-4 text-center">
+          <span class="text-2xl block mb-1">🎬</span>
+          <div class="text-xl font-bold text-accent-danger">48</div>
+          <div class="text-xs text-gray-500">视频生成</div>
+        </div>
+        <div class="bg-dark-card border border-dark-border rounded-lg p-4 text-center">
+          <span class="text-2xl block mb-1">🎨</span>
+          <div class="text-xl font-bold text-white">32</div>
+          <div class="text-xs text-gray-500">海报生成</div>
+        </div>
+      </div>
+
+      <!-- Plan Comparison -->
+      <div class="bg-dark-card border border-dark-border rounded-lg p-6 mt-6">
+        <h2 class="text-white font-semibold text-lg mb-4">📋 方案对比</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-dark-border">
+                <th class="text-left py-3 text-gray-500 font-normal">功能</th>
+                <th class="text-center py-3 text-gray-400">Free</th>
+                <th class="text-center py-3 text-accent-primary font-semibold">Pro ⬅</th>
+                <th class="text-center py-3 text-gray-400">Team</th>
+                <th class="text-center py-3 text-gray-400">企业</th>
+              </tr>
+            </thead>
+            <tbody class="text-gray-400">
+              <tr class="border-b border-dark-border/50">
+                <td class="py-3">文案生成</td>
+                <td class="text-center">10/天</td>
+                <td class="text-center text-accent-success">无限</td>
+                <td class="text-center text-accent-success">无限</td>
+                <td class="text-center text-accent-success">无限</td>
+              </tr>
+              <tr class="border-b border-dark-border/50">
+                <td class="py-3">TTS 合成</td>
+                <td class="text-center">5/天</td>
+                <td class="text-center text-accent-success">100/天</td>
+                <td class="text-center text-accent-success">300/天</td>
+                <td class="text-center text-accent-success">不限</td>
+              </tr>
+              <tr class="border-b border-dark-border/50">
+                <td class="py-3">视频生成</td>
+                <td class="text-center">3 模板</td>
+                <td class="text-center text-accent-success">50/月</td>
+                <td class="text-center text-accent-success">200/月</td>
+                <td class="text-center text-accent-success">不限</td>
+              </tr>
+              <tr class="border-b border-dark-border/50">
+                <td class="py-3">海报生成</td>
+                <td class="text-center">基础</td>
+                <td class="text-center text-accent-success">100/月</td>
+                <td class="text-center text-accent-success">500/月</td>
+                <td class="text-center text-accent-success">不限</td>
+              </tr>
+              <tr>
+                <td class="py-3">价格</td>
+                <td class="text-center">免费</td>
+                <td class="text-center text-accent-primary font-semibold">¥99/月</td>
+                <td class="text-center">¥299/月</td>
+                <td class="text-center">联络</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

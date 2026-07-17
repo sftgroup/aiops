@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Users — Operator Console</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{colors:{'dark-card':'#1a1a2e','dark-bg':'#0f0f1a','dark-border':'#2a2a3e','dark-hover':'#252540','accent-primary':'#6366f1'}}}}</script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{background:#0f0f1a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+  ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#0f0f1a}::-webkit-scrollbar-thumb{background:#2a2a3e;border-radius:3px}
+  .sidebar-transition{transition:transform 0.3s ease}
+  .status-active{background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.2)}
+  .status-disabled{background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2)}
+  .role-admin{background:rgba(99,102,241,0.1);color:#818cf8;border:1px solid rgba(99,102,241,0.2)}
+  .role-operator{background:rgba(147,51,234,0.1);color:#a855f7;border:1px solid rgba(147,51,234,0.2)}
+  .role-user{background:rgba(156,163,175,0.1);color:#9ca3af;border:1px solid rgba(156,163,175,0.2)}
+</style>
+</head>
+<body class="min-h-screen bg-dark-bg flex">
+  <!-- ====== Sidebar ====== -->
+  <aside id="sidebar" class="w-64 bg-dark-card border-r border-dark-border flex flex-col shrink-0 sidebar-transition fixed lg:static inset-y-0 left-0 z-30 lg:translate-x-0 -translate-x-full">
+    <div class="h-16 flex items-center gap-3 px-5 border-b border-dark-border">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-accent-primary to-purple-600 flex items-center justify-center">
+        <i data-lucide="shield-check" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <span class="text-sm font-bold bg-gradient-to-r from-accent-primary to-purple-500 bg-clip-text text-transparent">AIOPS</span>
+        <span class="text-[10px] text-gray-500 block -mt-0.5">Operator</span>
+      </div>
+    </div>
+    <nav class="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+      <a href="operator-dashboard.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
+      </a>
+      <a href="operator-tenants.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors">
+        <i data-lucide="building-2" class="w-4 h-4"></i> Tenants
+      </a>
+      <a href="operator-users.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-accent-primary/10 text-accent-primary transition-colors">
+        <i data-lucide="users" class="w-4 h-4"></i> Users <span class="ml-auto w-1.5 h-1.5 rounded-full bg-accent-primary"></span>
+      </a>
+      <a href="operator-apikeys.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors">
+        <i data-lucide="key" class="w-4 h-4"></i> API Keys
+      </a>
+      <div class="pt-3 mt-3 border-t border-dark-border">
+        <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors"><i data-lucide="file-text" class="w-4 h-4"></i> Audit Log</a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors"><i data-lucide="settings" class="w-4 h-4"></i> System Settings</a>
+      </div>
+    </nav>
+    <div class="p-4 border-t border-dark-border">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-accent-primary to-purple-600 flex items-center justify-center text-white text-xs font-bold">SA</div>
+        <div class="flex-1 min-w-0"><p class="text-xs font-medium text-white truncate">Super Admin</p><p class="text-[10px] text-gray-500">admin@aiops.cloud</p></div>
+        <a href="operator-login.html" class="text-gray-600 hover:text-red-400 transition-colors"><i data-lucide="log-out" class="w-4 h-4"></i></a>
+      </div>
+    </div>
+  </aside>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="closeSidebar()"></div>
+
+  <!-- ====== Main Content ====== -->
+  <div class="flex-1 flex flex-col min-w-0">
+    <header class="h-16 border-b border-dark-border bg-dark-bg/80 backdrop-blur sticky top-0 z-10 flex items-center justify-between px-6">
+      <div class="flex items-center gap-3">
+        <button onclick="toggleSidebar()" class="lg:hidden text-gray-400 hover:text-white transition-colors"><i data-lucide="menu" class="w-5 h-5"></i></button>
+        <div class="flex items-center gap-2 text-sm text-gray-500">
+          <span>Operator</span><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i><span class="text-white font-medium">Users</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-[10px] text-gray-600 bg-dark-card border border-dark-border px-2.5 py-1 rounded-full flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span> System Online
+        </span>
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-accent-primary to-purple-600 flex items-center justify-center text-white text-xs font-bold">SA</div>
+      </div>
+    </header>
+
+    <main class="flex-1 p-6 overflow-y-auto">
+      <div class="max-w-7xl mx-auto">
+        <!-- Page Header -->
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-2xl font-bold">Users</h2>
+            <p class="text-sm text-gray-500 mt-1">Manage all platform user accounts</p>
+          </div>
+          <div class="flex items-center gap-2 text-xs text-gray-500">
+            <span class="bg-dark-card border border-dark-border px-2 py-1 rounded-lg">Total: <strong class="text-white">312</strong></span>
+            <span class="bg-dark-card border border-dark-border px-2 py-1 rounded-lg">Active: <strong class="text-green-400">287</strong></span>
+            <span class="bg-dark-card border border-dark-border px-2 py-1 rounded-lg">Disabled: <strong class="text-red-400">18</strong></span>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-dark-card rounded-xl border border-dark-border p-4 mb-4">
+          <div class="flex flex-col sm:flex-row gap-3">
+            <div class="relative flex-1">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <i data-lucide="search" class="w-4 h-4 text-gray-600"></i>
+              </div>
+              <input type="text" placeholder="Search by name or email..."
+                class="w-full pl-10 pr-4 py-2.5 bg-dark-bg border border-dark-border rounded-xl text-white text-sm placeholder:text-gray-600 focus:outline-none focus:border-accent-primary/50 transition-all">
+            </div>
+            <select class="bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-accent-primary/50 min-w-[130px]">
+              <option value="">All Status</option><option value="active">Active</option><option value="disabled">Disabled</option>
+            </select>
+            <select class="bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-accent-primary/50 min-w-[130px]">
+              <option value="">All Roles</option><option value="user">User</option><option value="admin">Admin</option><option value="operator">Operator</option>
+            </select>
+            <button class="flex items-center gap-2 px-4 py-2.5 bg-dark-bg border border-dark-border rounded-xl text-sm text-gray-400 hover:text-white transition-colors">
+              <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-dark-card rounded-xl border border-dark-border overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-dark-border text-left">
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Tenant</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Registered</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-dark-border">
+                <!-- Row 1 -->
+                <tr class="hover:bg-dark-hover/50 transition-colors">
+                  <td class="px-5 py-4">
+                    <div class="flex items-center gap-3">
+                      <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white text-xs font-bold">JL</div>
+                      <span class="text-sm font-medium text-white">John Lee</span>
+                    </div>
+                  </td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-400">john@cloudtech.com</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-300">CloudTech Solutions</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium role-user px-2.5 py-1 rounded-full">User</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium status-active px-2.5 py-1 rounded-full">Active</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">Jun 12, 2026</span></td>
+                  <td class="px-5 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Disable"><i data-lucide="user-x" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-accent-primary hover:bg-accent-primary/10 transition-colors" title="Change Role"><i data-lucide="user-cog" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 2 -->
+                <tr class="hover:bg-dark-hover/50 transition-colors">
+                  <td class="px-5 py-4">
+                    <div class="flex items-center gap-3">
+                      <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold">SM</div>
+                      <span class="text-sm font-medium text-white">Sarah Miller</span>
+                    </div>
+                  </td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-400">sarah@datastream.io</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-300">DataStream AI</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium role-user px-2.5 py-1 rounded-full">User</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium status-active px-2.5 py-1 rounded-full">Active</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">Jun 14, 2026</span></td>
+                  <td class="px-5 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Disable"><i data-lucide="user-x" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-accent-primary hover:bg-accent-primary/10 transition-colors" title="Change Role"><i data-lucide="user-cog" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 3 - Disabled -->
+                <tr class="hover:bg-dark-hover/50 transition-colors bg-red-500/5">
+                  <td class="px-5 py-4">
+                    <div class="flex items-center gap-3">
+                      <div class="w-8 h-8 rounded-full bg-gradient-to-br from-gray-500 to-gray-600 flex items-center justify-center text-white text-xs font-bold">TK</div>
+                      <span class="text-sm font-medium text-white/60">Tom Kurt</span>
+                    </div>
+                  </td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">tom@byteforge.com</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-400">ByteForge</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium role-user px-2.5 py-1 rounded-full">User</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium status-disabled px-2.5 py-1 rounded-full">Disabled</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">Jun 18, 2026</span></td>
+                  <td class="px-5 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-green-400 hover:bg-green-400/10 transition-colors" title="Enable"><i data-lucide="user-check" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-accent-primary hover:bg-accent-primary/10 transition-colors" title="Change Role"><i data-lucide="user-cog" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 4 - Admin -->
+                <tr class="hover:bg-dark-hover/50 transition-colors">
+                  <td class="px-5 py-4">
+                    <div class="flex items-center gap-3">
+                      <div class="w-8 h-8 rounded-full bg-gradient-to-br from-accent-primary to-purple-600 flex items-center justify-center text-white text-xs font-bold">AC</div>
+                      <span class="text-sm font-medium text-white">Alice Chen</span>
+                    </div>
+                  </td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-400">alice@technova.ai</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-300">TechNova Labs</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium role-admin px-2.5 py-1 rounded-full">Admin</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium status-active px-2.5 py-1 rounded-full">Active</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">Jun 19, 2026</span></td>
+                  <td class="px-5 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Disable"><i data-lucide="user-x" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-accent-primary hover:bg-accent-primary/10 transition-colors" title="Change Role"><i data-lucide="user-cog" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 5 - Operator -->
+                <tr class="hover:bg-dark-hover/50 transition-colors">
+                  <td class="px-5 py-4">
+                    <div class="flex items-center gap-3">
+                      <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-purple-700 flex items-center justify-center text-white text-xs font-bold">BW</div>
+                      <span class="text-sm font-medium text-white">Bob Wang</span>
+                    </div>
+                  </td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-400">bob@pulseanalytics.co</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-300">Pulse Analytics</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium role-operator px-2.5 py-1 rounded-full">Operator</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium status-active px-2.5 py-1 rounded-full">Active</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">Jun 20, 2026</span></td>
+                  <td class="px-5 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Disable"><i data-lucide="user-x" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-accent-primary hover:bg-accent-primary/10 transition-colors" title="Change Role"><i data-lucide="user-cog" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 6 -->
+                <tr class="hover:bg-dark-hover/50 transition-colors">
+                  <td class="px-5 py-4">
+                    <div class="flex items-center gap-3">
+                      <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white text-xs font-bold">EM</div>
+                      <span class="text-sm font-medium text-white">Eva Martinez</span>
+                    </div>
+                  </td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-400">eva@nexgenmedia.com</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-300">NexGen Media</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium role-user px-2.5 py-1 rounded-full">User</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium status-active px-2.5 py-1 rounded-full">Active</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">Jun 21, 2026</span></td>
+                  <td class="px-5 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Disable"><i data-lucide="user-x" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-accent-primary hover:bg-accent-primary/10 transition-colors" title="Change Role"><i data-lucide="user-cog" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <div class="px-5 py-3 border-t border-dark-border flex items-center justify-between">
+            <span class="text-xs text-gray-500">Showing 1-6 of 312 users</span>
+            <div class="flex gap-1">
+              <button class="px-2.5 py-1.5 rounded-lg text-xs text-gray-500 border border-dark-border hover:bg-dark-hover transition-colors disabled:opacity-30" disabled>← Prev</button>
+              <button class="px-2.5 py-1.5 rounded-lg text-xs bg-accent-primary text-white font-medium">1</button>
+              <button class="px-2.5 py-1.5 rounded-lg text-xs text-gray-400 hover:bg-dark-hover transition-colors">2</button>
+              <button class="px-2.5 py-1.5 rounded-lg text-xs text-gray-400 hover:bg-dark-hover transition-colors">3</button>
+              <span class="px-2.5 py-1.5 text-xs text-gray-600">...</span>
+              <button class="px-2.5 py-1.5 rounded-lg text-xs text-gray-400 hover:bg-dark-hover transition-colors">52</button>
+              <button class="px-2.5 py-1.5 rounded-lg text-xs text-gray-400 border border-dark-border hover:bg-dark-hover transition-colors">Next →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    lucide.createIcons();
+    function toggleSidebar(){document.getElementById('sidebar').classList.toggle('-translate-x-full');document.getElementById('sidebar-overlay').classList.toggle('hidden');}
+    function closeSidebar(){document.getElementById('sidebar').classList.add('-translate-x-full');document.getElementById('sidebar-overlay').classList.add('hidden');}
+  </script>
+</body>
+</html>

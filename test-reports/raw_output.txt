@@ -1,0 +1,364 @@
+=== AT-001: Auth - User Registration ===
+--- AT-001-01: Normal Registration ---
+{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI1NTE5Mjc4ZC04YzM5LTQxNGYtOGJkNC02OWQwNGFmYTk1YjkiLCJ0ZW5hbnRJZCI6Ijk2YTNjZjBmLTZmYjEtNDc0Mi1iYTllLTY0ODRkMzEyMjU2NyIsImlhdCI6MTc4MjY5OTMzNiwiZXhwIjoxNzgyNzAwMjM2fQ.-xnDLpDZtD5ieL-hwzo4YrMDRhMJC0u4DAUKTNDS3-I","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI1NTE5Mjc4ZC04YzM5LTQxNGYtOGJkNC02OWQwNGFmYTk1YjkiLCJ0ZW5hbnRJZCI6Ijk2YTNjZjBmLTZmYjEtNDc0Mi1iYTllLTY0ODRkMzEyMjU2NyIsImp0aSI6ImYxZTBiNmY2LTJkODktNDkxZi1hZmEzLWM1MzhhNjljMWFmYiIsImlhdCI6MTc4MjY5OTMzNiwiZXhwIjoxNzgzMzA0MTM2fQ.stVgZUv5WW58B8U32gobHO0tFq8B5l4Lsrc5WVAU58Y","user":{"id":"5519278d-8c39-414f-8bd4-69d04afa95b9","username":"tester_01","email":"tester01@aiops.test","name":"tester_01"},"tenant":{"id":"96a3cf0f-6fb1-4742-ba9e-6484d3122567","name":"tester_01's Workspace","slug":"ws-5519278d"},"subscription":{"plan":"free","status":"active"}}
+201
+--- AT-001-02: Email Optional Registration ---
+{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2MGMxNDExOS0zY2IzLTQ4MzQtYjM4Ni03MjJmZjZjNGMxZmIiLCJ0ZW5hbnRJZCI6ImJiOWQ5ZmQ3LTMxN2YtNDIwNS04ZDA4LWI5MDE4YjZhMGZmMSIsImlhdCI6MTc4MjY5OTMzOCwiZXhwIjoxNzgyNzAwMjM4fQ.FWmRJZZj4MhuG2nydP4jynF4mii1AcygmeIjYp9eXw4","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2MGMxNDExOS0zY2IzLTQ4MzQtYjM4Ni03MjJmZjZjNGMxZmIiLCJ0ZW5hbnRJZCI6ImJiOWQ5ZmQ3LTMxN2YtNDIwNS04ZDA4LWI5MDE4YjZhMGZmMSIsImp0aSI6IjJjOTQ3MjMzLTI0NGQtNGI2OS04NmM5LWNjZDM2ZmQ5ZjZlNSIsImlhdCI6MTc4MjY5OTMzOCwiZXhwIjoxNzgzMzA0MTM4fQ.5f1zNVSCm9QF90JKnUWZ7y3ERxCqqdvZ0_5l7lj-jNE","user":{"id":"60c14119-3cb3-4834-b386-722ff6c4c1fb","username":"tester_02","email":"tester02@aiops.test","name":"tester_02"},"tenant":{"id":"bb9d9fd7-317f-4205-8d08-b9018b6a0ff1","name":"tester_02's Workspace","slug":"ws-60c14119"},"subscription":{"plan":"free","status":"active"}}
+201
+--- AT-001-03: Short Username <3 chars ---
+{"error":"Validation failed","details":["Username must be at least 3 characters"]}
+400
+--- AT-001-04: Weak Password <8 chars ---
+{"error":"Validation failed","details":["Password must be at least 8 characters","Password must contain at least one uppercase letter"]}
+400
+--- AT-001-05: Password No Uppercase ---
+{"error":"Validation failed","details":["Password must contain at least one uppercase letter"]}
+400
+--- AT-001-06: Password No Number ---
+{"error":"Validation failed","details":["Password must contain at least one number"]}
+400
+--- AT-001-07: Invalid Email ---
+{"error":"Validation failed","details":["Invalid email format"]}
+400
+--- AT-001-08: Duplicate Username ---
+{"error":"Username or email already taken"}
+409
+--- AT-001-09: Empty Request Body ---
+{"error":"Validation failed","details":["Username must be at least 3 characters","Password must be at least 8 characters"]}
+400
+
+=== AT-002: Auth - User Login ===
+--- AT-002-01: Username Login ---
+{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI1NTE5Mjc4ZC04YzM5LTQxNGYtOGJkNC02OWQwNGFmYTk1YjkiLCJ0ZW5hbnRJZCI6Ijk2YTNjZjBmLTZmYjEtNDc0Mi1iYTllLTY0ODRkMzEyMjU2NyIsImlhdCI6MTc4MjY5OTM0NSwiZXhwIjoxNzgyNzAwMjQ1fQ.KetoVGZLDSZjOsEBm2YNFtFyF3ff8fS79_R0mqz8SnE","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI1NTE5Mjc4ZC04YzM5LTQxNGYtOGJkNC02OWQwNGFmYTk1YjkiLCJ0ZW5hbnRJZCI6Ijk2YTNjZjBmLTZmYjEtNDc0Mi1iYTllLTY0ODRkMzEyMjU2NyIsImp0aSI6ImQ3MWU5ODI2LTg2ZTktNDBlZi1hZjgyLTM1NmE5YjljMjE4ZSIsImlhdCI6MTc4MjY5OTM0NSwiZXhwIjoxNzgzMzA0MTQ1fQ.3tcBOJjofaMXUuXVO1s5PTlWe8sDNC6ZfQJTBibk_x8","user":{"id":"5519278d-8c39-414f-8bd4-69d04afa95b9","username":"tester_01","email":"tester01@aiops.test","name":"tester_01"},"tenant":{"id":"96a3cf0f-6fb1-4742-ba9e-6484d3122567","name":"tester_01's Workspace","slug":"ws-5519278d","plan":"free","status":"active","settings":{},"createdAt":"2026-06-29T02:15:36.593Z","updatedAt":"2026-06-29T02:15:36.593Z"}}
+200
+TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI1NTE5Mjc4ZC04YzM5LTQxNGYtOGJkNC02OWQwNGFmYTk1YjkiLCJ0ZW5hbnRJZCI6Ijk2YTNjZjBmLTZmYjEtNDc0Mi1iYTllLTY0ODRkMzEyMjU2NyIsImlhdCI6MTc4MjY5OTM0NSwiZXhwIjoxNzgyNzAwMjQ1fQ.KetoVGZLDSZjOsEBm2YNFtFyF3ff8fS79_R0mqz8SnE
+
+--- AT-002-02: Email Login ---
+{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI1NTE5Mjc4ZC04YzM5LTQxNGYtOGJkNC02OWQwNGFmYTk1YjkiLCJ0ZW5hbnRJZCI6Ijk2YTNjZjBmLTZmYjEtNDc0Mi1iYTllLTY0ODRkMzEyMjU2NyIsImlhdCI6MTc4MjY5OTM0NiwiZXhwIjoxNzgyNzAwMjQ2fQ.3Zo0bt5jIfAhFzeUy59gQR84Zd2WRYw71jyLhHtz7TA","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI1NTE5Mjc4ZC04YzM5LTQxNGYtOGJkNC02OWQwNGFmYTk1YjkiLCJ0ZW5hbnRJZCI6Ijk2YTNjZjBmLTZmYjEtNDc0Mi1iYTllLTY0ODRkMzEyMjU2NyIsImp0aSI6ImU3ODNiNDQzLTU0MGQtNGZiZC1iMTBlLWQwYzRlZTY3OWMzZCIsImlhdCI6MTc4MjY5OTM0NiwiZXhwIjoxNzgzMzA0MTQ2fQ.dEjBU9wyF1vW1F5OV888GERGxhyTsmVnv_9_hovu-b4","user":{"id":"5519278d-8c39-414f-8bd4-69d04afa95b9","username":"tester_01","email":"tester01@aiops.test","name":"tester_01"},"tenant":{"id":"96a3cf0f-6fb1-4742-ba9e-6484d3122567","name":"tester_01's Workspace","slug":"ws-5519278d","plan":"free","status":"active","settings":{},"createdAt":"2026-06-29T02:15:36.593Z","updatedAt":"2026-06-29T02:15:36.593Z"}}
+200
+--- AT-002-03: Wrong Password ---
+{"error":"Invalid credentials"}
+401
+--- AT-002-04: Non-existent User ---
+{"error":"Invalid credentials"}
+401
+--- AT-002-05: Empty Fields ---
+{"error":"Username or email and password are required"}
+400
+--- AT-002-06: Get Profile (valid token) ---
+{"user":{"id":"5519278d-8c39-414f-8bd4-69d04afa95b9","username":"tester_01","email":"tester01@aiops.test","name":"tester_01"},"tenants":[{"id":"96a3cf0f-6fb1-4742-ba9e-6484d3122567","name":"tester_01's Workspace","role":"owner","subscription":{"id":"4184d6a7-2110-494c-81a8-1baadaca21fc","tenantId":"96a3cf0f-6fb1-4742-ba9e-6484d3122567","plan":"free","status":"active","currentPeriodStart":null,"currentPeriodEnd":null,"stripeSubscriptionId":null,"createdAt":"2026-06-29T02:15:36.598Z"}}]}
+200
+--- AT-002-07: Invalid Token ---
+{"error":"Invalid or expired token"}
+401
+--- AT-002-08: No Token ---
+{"error":"Missing or invalid authorization header"}
+401
+
+=== AT-003: Auth - Wallet Login ===
+--- AT-003-01: Get Nonce ---
+{"message":"Sign this message to login to Aiops SAAS.\nNonce: 1782699350198"}
+200
+NONCE=
+
+--- AT-003-02: Empty Address ---
+{"error":"Address query parameter is required"}
+400
+--- AT-003-03: Invalid Address Format ---
+{"message":"Sign this message to login to Aiops SAAS.\nNonce: 1782699352200"}
+200
+--- AT-003-04: Wallet Login (invalid sig, expected 401) ---
+{"error":"Internal server error"}
+500
+--- AT-003-05: Invalid Signature ---
+{"error":"Internal server error"}
+500
+
+=== AT-004: Content Generation ===
+--- AT-004-01: Normal Generate (authenticated) ---
+{"error":"请先在 Settings 中配置 DeepSeek API Key"}
+400
+--- AT-004-02: Unauthenticated ---
+{"error":"Missing or invalid authorization header"}
+401
+--- AT-004-03: Empty Topic ---
+{"error":"topic is required"}
+400
+--- AT-004-04: Get List ---
+{"items":[],"total":0}
+200
+
+=== AT-005: TTS ===
+--- AT-005-01: Normal Synthesize ---
+{"error":"TTS synthesis failed: spawn /usr/local/bin/edge-tts ENOENT"}
+502
+--- AT-005-02: Empty Text ---
+{"error":"text is required"}
+400
+--- AT-005-03: Voice List ---
+{"voices":{"zh-CN":[{"id":"zh-CN-XiaoxiaoNeural","name":"晓晓 (女·温柔)","gender":"female"},{"id":"zh-CN-YunxiNeural","name":"云希 (男·新闻)","gender":"male"},{"id":"zh-CN-XiaoyiNeural","name":"晓伊 (女·活泼)","gender":"female"},{"id":"zh-CN-YunyangNeural","name":"云扬 (男·新闻)","gender":"male"},{"id":"zh-CN-XiaochenNeural","name":"晓辰 (女·自然)","gender":"female"}],"en-US":[{"id":"en-US-JennyNeural","name":"Jenny (F)","gender":"female"},{"id":"en-US-GuyNeural","name":"Guy (M)","gender":"male"},{"id":"en-US-AriaNeural","name":"Aria (F)","gender":"female"},{"id":"en-US-DavisNeural","name":"Davis (M)","gender":"male"},{"id":"en-US-JasonNeural","name":"Jason (M)","gender":"male"}]}}
+200
+--- AT-005-04: TTS History ---
+{"items":[],"total":0}
+200
+--- AT-005-05: Audio Download (filename from synthesize) ---
+{"error":"Audio not found"}
+404
+--- AT-005-06: Path Traversal ---
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f0f1a" />
+    <meta name="description" content="AI 内容运营平台 — 从文案到视频，AI 全链路创作工具" />
+    <title>Aiops — AI 内容运营平台</title>
+    <script type="module" crossorigin src="/assets/index-BCNiCgSL.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DRKBlOJ1.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+
+200
+--- AT-005-07: Unauthenticated ---
+{"error":"Missing or invalid authorization header"}
+401
+
+=== AT-006: Dashboard ===
+--- AT-006-01: Overview ---
+{"today":{"calls":0,"tokens":0,"quantity":0},"week":{"calls":0,"tokens":0,"quantity":0},"month":{"calls":0,"tokens":0,"quantity":0},"totals":{"contents":0,"tts":0}}
+200
+--- AT-006-02: Trend ---
+{"days":7,"trend":[{"date":"2026-06-21","calls":0,"tokens":0,"copywriting":0,"tts":0},{"date":"2026-06-22","calls":0,"tokens":0,"copywriting":0,"tts":0},{"date":"2026-06-23","calls":0,"tokens":0,"copywriting":0,"tts":0},{"date":"2026-06-24","calls":0,"tokens":0,"copywriting":0,"tts":0},{"date":"2026-06-25","calls":0,"tokens":0,"copywriting":0,"tts":0},{"date":"2026-06-26","calls":0,"tokens":0,"copywriting":0,"tts":0},{"date":"2026-06-27","calls":0,"tokens":0,"copywriting":0,"tts":0}]}
+200
+--- AT-006-03: Quota ---
+{"quota":{"aiCalls":100,"tts":50,"tokens":50000},"usage":{"monthCalls":0,"monthTokens":0},"pct":{"calls":0,"tokens":0}}
+200
+--- AT-006-04: Unauthenticated ---
+{"error":"Missing or invalid authorization header"}
+401
+--- AT-006-05: Negative Days ---
+{"days":-1,"trend":[]}
+200
+
+=== AT-007: Profile ===
+--- AT-007-01: Get Profile ---
+{"user":{"id":"5519278d-8c39-414f-8bd4-69d04afa95b9","username":"tester_01","email":"tester01@aiops.test","name":"tester_01","walletAddress":null,"avatarUrl":null,"createdAt":"2026-06-29T02:15:36.589Z"},"tenant":{"id":"96a3cf0f-6fb1-4742-ba9e-6484d3122567","name":"tester_01's Workspace","slug":"ws-5519278d","plan":"free"}}
+200
+--- AT-007-02: Update Profile ---
+{"user":{"id":"5519278d-8c39-414f-8bd4-69d04afa95b9","username":"tester_01","email":"tester01@aiops.test","name":"新名字","walletAddress":null,"avatarUrl":null,"createdAt":"2026-06-29T02:15:36.589Z","updatedAt":"2026-06-29T02:16:13.344Z"}}
+200
+--- AT-007-03: Change Password ---
+{"error":"Current password is incorrect"}
+403
+--- AT-007-04: Wrong Current Password ---
+{"error":"New password must be at least 8 characters long"}
+400
+--- AT-007-07: Weak New Password ---
+{"error":"New password must be at least 8 characters long"}
+400
+
+=== AT-008: Team Management ===
+--- AT-008-01: Member List ---
+{"items":[{"id":"86ede2e0-9d91-4a1f-8e7c-6a4d7695807e","tenantId":"96a3cf0f-6fb1-4742-ba9e-6484d3122567","userId":"5519278d-8c39-414f-8bd4-69d04afa95b9","role":"owner","status":"active","email":"tester01@aiops.test","name":"新名字","username":"tester_01","avatarUrl":null,"joinedAt":"2026-06-29T02:15:36.595Z"}],"total":1}
+200
+--- AT-008-02: Invite Member ---
+{"error":"Only owners and admins can invite members"}
+403
+--- AT-008-03: Duplicate Invite ---
+{"error":"Only owners and admins can invite members"}
+403
+--- AT-008-04: Invalid Role ---
+{"error":"Only owners and admins can invite members"}
+403
+
+=== AT-009: Billing ===
+--- AT-009-01: Get Prices (public) ---
+{"prices":{"starter":{"id":"starter","name":"Starter","price":"$29","amount":2900,"interval":"month","features":["500 AI 生成次数/月","200 TTS 合成/月","250K Tokens/月","5 个团队成员","标准 API Key"]},"pro":{"id":"pro","name":"Pro","price":"$99","amount":9900,"interval":"month","features":["2000 AI 生成次数/月","1000 TTS 合成/月","1M Tokens/月","10 个团队成员","优先 API 并发","IP 白名单","审计日志"]},"enterprise":{"id":"enterprise","name":"Enterprise","price":"$299","amount":29900,"interval":"month","features":["10000 AI 生成次数/月","5000 TTS 合成/月","5M Tokens/月","无限团队成员","最高 API 并发","IP 白名单 + 审计","自定义域名","专属支持"]}}}
+200
+--- AT-009-02: Checkout ---
+{"error":"Payment system is not configured yet. Please contact support.","code":"STRIPE_NOT_CONFIGURED"}
+503
+--- AT-009-03: Invalid Plan ---
+{"error":"Invalid plan"}
+400
+--- AT-009-04: Billing Portal ---
+{"error":"Payment system is not configured yet.","code":"STRIPE_NOT_CONFIGURED"}
+503
+--- AT-009-05: Webhook (no signature) ---
+{"received":true,"mode":"dummy"}
+200
+
+=== AT-010: Settings / API Key Vault ===
+--- AT-010-01: Get Keys (masked) ---
+{"stripe":{"configured":false},"deepseek":{"configured":false},"openai":{"configured":false},"qwen":{"configured":false},"seedance":{"configured":false},"wan":{"configured":false},"libtv":{"configured":false}}
+200
+--- AT-010-02: Add Key ---
+{"error":"Failed to encrypt API key. Check server ENCRYPTION_KEY configuration."}
+500
+--- AT-010-03: Empty Key ---
+{"error":"key is required and must be a non-empty string"}
+400
+--- AT-010-04: Invalid Service ---
+{"error":"Invalid service. Must be one of: stripe, deepseek, openai, qwen, seedance, wan, libtv"}
+400
+--- AT-010-06: IP Whitelist Query ---
+{"enabled":false,"ips":[]}
+200
+--- AT-010-07: IP Whitelist Set ---
+{"enabled":false,"ips":["1.2.3.4"]}
+200
+--- AT-010-08: Invalid IP ---
+{"error":"Invalid IP/CIDR: abc"}
+400
+
+=== AT-011: Quota System ===
+--- AT-011-01: Quota Summary ---
+{"plan":"free","quotas":{"copywriting":{"limit":5,"used":0,"remaining":5,"allowed":true},"tts":{"limit":3,"used":0,"remaining":3,"allowed":true},"video":{"limit":1,"used":0,"remaining":1,"allowed":true},"poster":{"limit":3,"used":0,"remaining":3,"allowed":true}}}
+200
+
+=== AT-012: Pipeline Status ===
+--- AT-012-01: Service Status ---
+{"pipeline":[{"service":"deepseek","name":"DeepSeek","configured":false,"hasTenantKey":false,"hasGlobalKey":false},{"service":"openai","name":"OpenAI","configured":false,"hasTenantKey":false,"hasGlobalKey":false},{"service":"qwen","name":"Qwen","configured":false,"hasTenantKey":false,"hasGlobalKey":false}]}
+200
+--- AT-012-02: Validate Key ---
+{"error":"service and key are required"}
+400
+--- AT-012-03: Invalid Service ---
+{"error":"service and key are required"}
+400
+
+=== AT-013: CORS ===
+--- AT-013-01: Valid Origin Preflight ---
+
+204
+--- AT-013-02: Invalid Origin ---
+
+204
+
+=== AT-014: Security Headers ===
+--- AT-014: All Security Headers ---
+HTTP/1.1 404 Not Found
+Content-Security-Policy: default-src 'self';script-src 'self' 'unsafe-inline' 'unsafe-eval';style-src 'self' 'unsafe-inline';img-src 'self' data: https:;connect-src 'self' https://api.deepseek.com;media-src 'self' blob:;font-src 'self' data:;base-uri 'self';form-action 'self';frame-ancestors 'self';object-src 'none';script-src-attr 'none'
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Origin-Agent-Cluster: ?1
+Referrer-Policy: no-referrer
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+X-Content-Type-Options: nosniff
+X-DNS-Prefetch-Control: off
+X-Download-Options: noopen
+X-Frame-Options: SAMEORIGIN
+X-Permitted-Cross-Domain-Policies: none
+X-XSS-Protection: 0
+Vary: Origin
+Access-Control-Allow-Credentials: true
+Content-Type: application/json; charset=utf-8
+Content-Length: 21
+ETag: W/"15-bm7tJgu8FHlq5QU+Y6gDxOGPfRc"
+Date: Mon, 29 Jun 2026 02:16:21 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+
+
+=== AT-015: Input/Injection ===
+--- AT-015-01: SQL Injection ---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Bad Request</pre>
+</body>
+</html>
+
+400
+--- AT-015-02: XSS Username ---
+{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlYzBmODdiZi0xMzg3LTQ1MTctYjZkOC0xMzEwNThlYTg0ZDkiLCJ0ZW5hbnRJZCI6ImVmY2I5ZWUzLWNmNGItNDAzYS1hN2U2LWFjNDE0MTg2MDkwOCIsImlhdCI6MTc4MjY5OTM4MiwiZXhwIjoxNzgyNzAwMjgyfQ.AjTo1QqgCXwHsX1wxOydxJt8Pv3KIMRJZg9efIuvQjw","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlYzBmODdiZi0xMzg3LTQ1MTctYjZkOC0xMzEwNThlYTg0ZDkiLCJ0ZW5hbnRJZCI6ImVmY2I5ZWUzLWNmNGItNDAzYS1hN2U2LWFjNDE0MTg2MDkwOCIsImp0aSI6IjljMmY2YWJjLWY4YWEtNDYzNi1hOTEyLWVhODdkZWI4ODkwNiIsImlhdCI6MTc4MjY5OTM4MiwiZXhwIjoxNzgzMzA0MTgyfQ.UWoYWass57a-MBzinEHHiRhKicLAFWQwGQZ-4riYFss","user":{"id":"ec0f87bf-1387-4517-b6d8-131058ea84d9","username":"<script>alert(1)</script>","email":null,"name":"<script>alert(1)</script>"},"tenant":{"id":"efcb9ee3-cf4b-403a-a7e6-ac4141860908","name":"<script>alert(1)</script>'s Workspace","slug":"ws-ec0f87bf"},"subscription":{"plan":"free","status":"active"}}
+201
+--- AT-015-03: XSS Content Topic ---
+{"error":"请先在 Settings 中配置 DeepSeek API Key"}
+400
+--- AT-015-04: Sensitive Paths ---
+GET /.env:
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f0f1a" />
+    <meta name="description" content="AI 内容运营平台 — 从文案到视频，AI 全链路创作工具" />
+    <title>Aiops — AI 内容运营平台</title>
+    <script type="module" crossorigin src="/assets/index-BCNiCgSL.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DRKBlOJ1.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+
+200
+GET /robots.txt:
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f0f1a" />
+    <meta name="description" content="AI 内容运营平台 — 从文案到视频，AI 全链路创作工具" />
+    <title>Aiops — AI 内容运营平台</title>
+    <script type="module" crossorigin src="/assets/index-BCNiCgSL.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DRKBlOJ1.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+
+200
+GET /.git/HEAD:
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f0f1a" />
+    <meta name="description" content="AI 内容运营平台 — 从文案到视频，AI 全链路创作工具" />
+    <title>Aiops — AI 内容运营平台</title>
+    <script type="module" crossorigin src="/assets/index-BCNiCgSL.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DRKBlOJ1.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+
+200
+GET /node_modules/:
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f0f1a" />
+    <meta name="description" content="AI 内容运营平台 — 从文案到视频，AI 全链路创作工具" />
+    <title>Aiops — AI 内容运营平台</title>
+    <script type="module" crossorigin src="/assets/index-BCNiCgSL.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DRKBlOJ1.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+
+200
+
+=== SC-09: Health Check ===
+{"error":"Not found"}
+404
+=== ALL TESTS COMPLETE ===

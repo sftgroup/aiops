@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIOPS SAAS — TTS Studio (参照老项目)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{colors:{'dark-card':'#1a1a2e','dark-bg':'#0f0f1a','dark-border':'#2a2a3e','dark-hover':'#252540','accent-primary':'#6366f1'}}}}</script>
+  <style>body{background:#0f0f1a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#0f0f1a}::-webkit-scrollbar-thumb{background:#2a2a3e;border-radius:3px}</style>
+</head>
+<body class="min-h-screen bg-dark-bg">
+  <!-- Header -->
+  <header class="border-b border-dark-border bg-dark-bg/80 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <a href="#" class="text-xl font-bold bg-gradient-to-r from-accent-primary to-purple-500 bg-clip-text text-transparent">Aiops</a>
+        <nav class="flex gap-6 ml-8">
+          <a href="#" class="text-gray-400 hover:text-white text-sm transition-colors">Dashboard</a>
+          <a href="#" class="text-accent-primary text-sm font-medium">Pipeline</a>
+          <a href="#" class="text-gray-400 hover:text-white text-sm transition-colors">Content</a>
+          <a href="#" class="text-gray-400 hover:text-white text-sm transition-colors">Settings</a>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <div class="max-w-7xl mx-auto px-6 py-8">
+    <!-- Page Header -->
+    <div class="mb-6">
+      <h2 class="text-3xl font-bold">🔊 TTS Studio</h2>
+      <p class="text-base text-gray-500 mt-1">AI-powered text-to-speech with translation, optimization & smart voice selection</p>
+    </div>
+
+    <!-- ====== Main: Left (4-step flow) + Right (history) ====== -->
+    <div class="flex flex-col lg:flex-row gap-6">
+      <!-- LEFT: 4-Step Flow -->
+      <div class="flex-1 space-y-5">
+
+        <!-- Clear All -->
+        <div class="flex items-center justify-end">
+          <button class="flex items-center gap-1 px-3 py-1.5 text-[13px] text-gray-500 hover:text-red-400 border border-transparent hover:border-red-500/30 rounded-lg transition-all">✕ Clear All</button>
+        </div>
+
+        <!-- ===== STEP 1: 输入文案 ===== -->
+        <section class="bg-dark-card rounded-2xl p-6 border border-dark-border">
+          <div class="flex items-center gap-3 mb-4">
+            <span class="w-8 h-8 rounded-full bg-accent-primary flex items-center justify-center text-sm font-bold text-white">1</span>
+            <h2 class="text-lg font-semibold">Input Text</h2>
+          </div>
+          <textarea class="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-xl text-white focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/20 transition-all h-32 resize-none text-base leading-relaxed placeholder:text-gray-500"
+            placeholder="Paste or type your text content here...">在这个快速变化的时代，AI 技术正在重新定义内容创作的边界。从文案生成到语音合成，每一项创新都在帮助创作者更高效地表达想法。</textarea>
+          <div class="flex items-center justify-between mt-1 mb-3">
+            <span class="text-[13px] text-gray-600">87 / 5000 chars</span>
+            <button class="text-[13px] text-gray-500 hover:text-gray-300">Clear</button>
+          </div>
+          <div class="flex items-center gap-3">
+            <button class="flex items-center gap-2 px-4 py-2.5 bg-dark-bg border border-dark-border rounded-xl text-[13px] text-gray-400 hover:text-gray-300 hover:border-gray-600 transition-colors">
+              📁 Upload .txt .md .docx
+            </button>
+          </div>
+        </section>
+
+        <!-- ===== STEP 2: 选择语言 & 音色 ===== -->
+        <section class="bg-dark-card rounded-2xl p-6 border border-dark-border">
+          <div class="flex items-center gap-3 mb-4">
+            <span class="w-8 h-8 rounded-full bg-accent-primary flex items-center justify-center text-sm font-bold text-white">2</span>
+            <h2 class="text-lg font-semibold">Language & Voice</h2>
+          </div>
+
+          <!-- Language Selector -->
+          <div class="mb-4">
+            <label class="text-[13px] text-gray-500 font-medium mb-1.5 block">Target Language:</label>
+            <div class="flex flex-wrap gap-1.5">
+              <span class="px-3 py-1.5 rounded-lg text-[13px] cursor-pointer bg-accent-primary/20 text-accent-primary border border-accent-primary/30 font-medium">🇨🇳 中文</span>
+              <span class="px-3 py-1.5 rounded-lg text-[13px] cursor-pointer bg-dark-bg border border-dark-border text-gray-400 hover:border-gray-600 transition-colors">🇺🇸 English</span>
+              <span class="px-3 py-1.5 rounded-lg text-[13px] cursor-pointer bg-dark-bg border border-dark-border text-gray-400 hover:border-gray-600 transition-colors">🇯🇵 日本語</span>
+              <span class="px-3 py-1.5 rounded-lg text-[13px] cursor-pointer bg-dark-bg border border-dark-border text-gray-400 hover:border-gray-600 transition-colors">🇰🇷 한국어</span>
+              <span class="px-3 py-1.5 rounded-lg text-[13px] cursor-pointer bg-dark-bg border border-dark-border text-gray-400 hover:border-gray-600 transition-colors">🇫🇷 Français</span>
+              <span class="px-3 py-1.5 rounded-lg text-[13px] cursor-pointer bg-dark-bg border border-dark-border text-gray-400 hover:border-gray-600 transition-colors">🇩🇪 Deutsch</span>
+              <span class="px-3 py-1.5 rounded-lg text-[13px] cursor-pointer bg-dark-bg border border-dark-border text-gray-400 hover:border-gray-600 transition-colors">🇪🇸 Español</span>
+              <span class="px-3 py-1.5 rounded-lg text-[13px] cursor-pointer bg-dark-bg border border-dark-border text-gray-400 hover:border-gray-600 transition-colors">🇯🇵 日本語</span>
+            </div>
+          </div>
+
+          <!-- Voice Section -->
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-[13px] text-gray-500 font-medium">Voice Role</label>
+              <div class="flex items-center gap-1.5">
+                <button class="flex items-center gap-1 px-2 py-1 rounded-lg text-[13px] text-gray-500 hover:text-gray-300 transition-colors">⚙ Preferences</button>
+                <button class="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[13px] font-semibold transition-all bg-purple-500 hover:bg-purple-400 text-white active:scale-95">✨ AI Recommend Voice</button>
+              </div>
+            </div>
+
+            <!-- Voice Cards Grid (参照老项目 VoiceSelector) -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div class="flex items-center gap-2 bg-dark-bg border border-accent-primary/40 rounded-lg px-3 py-2 cursor-pointer">
+                <span class="text-xs">👨</span>
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs font-medium block truncate">云希</span>
+                  <span class="text-[10px] text-gray-500">zh-CN · Male · 新闻</span>
+                </div>
+                <span class="text-[10px] text-accent-primary cursor-pointer hover:underline">▶</span>
+              </div>
+              <div class="flex items-center gap-2 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 cursor-pointer hover:border-gray-600">
+                <span class="text-xs">👩</span>
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs font-medium block truncate">晓晓</span>
+                  <span class="text-[10px] text-gray-500">zh-CN · Female · 温柔</span>
+                </div>
+                <span class="text-[10px] text-gray-500 cursor-pointer hover:underline">▶</span>
+              </div>
+              <div class="flex items-center gap-2 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 cursor-pointer hover:border-gray-600">
+                <span class="text-xs">👩</span>
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs font-medium block truncate">晓伊</span>
+                  <span class="text-[10px] text-gray-500">zh-CN · Female · 活泼</span>
+                </div>
+                <span class="text-[10px] text-gray-500 cursor-pointer hover:underline">▶</span>
+              </div>
+              <div class="flex items-center gap-2 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 cursor-pointer hover:border-gray-600">
+                <span class="text-xs">👨</span>
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs font-medium block truncate">云扬</span>
+                  <span class="text-[10px] text-gray-500">zh-CN · Male · 新闻</span>
+                </div>
+                <span class="text-[10px] text-gray-500 cursor-pointer hover:underline">▶</span>
+              </div>
+              <div class="flex items-center gap-2 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 cursor-pointer hover:border-gray-600">
+                <span class="text-xs">👩</span>
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs font-medium block truncate">Jenny</span>
+                  <span class="text-[10px] text-gray-500">en-US · Female</span>
+                </div>
+                <span class="text-[10px] text-gray-500 cursor-pointer hover:underline">▶</span>
+              </div>
+              <div class="flex items-center gap-2 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 cursor-pointer hover:border-gray-600">
+                <span class="text-xs">👨</span>
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs font-medium block truncate">Guy</span>
+                  <span class="text-[10px] text-gray-500">en-US · Male</span>
+                </div>
+                <span class="text-[10px] text-gray-500 cursor-pointer hover:underline">▶</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI Voice Recommendation (参照老项目 card) -->
+          <div class="bg-dark-bg rounded-xl border border-purple-500/20 overflow-hidden mb-4">
+            <div class="px-4 py-3 border-b border-dark-border flex items-center gap-2">
+              <span class="text-purple-400 text-sm">✨</span>
+              <span class="text-xs font-medium text-purple-400">AI Voice Recommendations</span>
+              <span class="text-xs text-gray-500 ml-auto">Tone: 沉稳专业</span>
+            </div>
+            <div class="p-3 space-y-2">
+              <div class="flex items-center gap-3 bg-dark-card rounded-lg p-3">
+                <span class="text-xs text-purple-400 font-bold">#1</span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium text-white/90">云希 (Yunxi)</p>
+                  <p class="text-xs text-gray-500 mt-0.5">沉稳有力的男声，适合科技科普内容，语气坚定有说服力</p>
+                </div>
+                <button class="px-3 py-1.5 rounded-lg text-[13px] font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">Selected</button>
+              </div>
+              <div class="flex items-center gap-3 bg-dark-card rounded-lg p-3">
+                <span class="text-xs text-purple-400/60 font-bold">#2</span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium text-white/70">晓晓 (Xiaoxiao)</p>
+                  <p class="text-xs text-gray-500 mt-0.5">自然温和的女声，适合生活感悟，情感表达细腻</p>
+                </div>
+                <button class="px-3 py-1.5 rounded-lg text-[13px] bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20">Select</button>
+              </div>
+              <div class="flex items-center gap-3 bg-dark-card rounded-lg p-3">
+                <span class="text-xs text-purple-400/40 font-bold">#3</span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium text-white/50">晓辰 (Xiaochen)</p>
+                  <p class="text-xs text-gray-500 mt-0.5">清新自然的表达，适合日常分享，语速适中</p>
+                </div>
+                <button class="px-3 py-1.5 rounded-lg text-[13px] bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20">Select</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Speed slider -->
+          <div>
+            <label class="block text-[13px] text-gray-500 mb-1.5 font-medium">Speed: +0%</label>
+            <div class="flex items-center gap-3">
+              <span class="text-xs text-gray-600">Slow</span>
+              <input type="range" min="-50" max="100" step="10" value="0" class="flex-1 accent-accent-primary h-1.5">
+              <span class="text-xs text-gray-600">Fast</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== STEP 3: AI 辅助 ===== -->
+        <section class="bg-dark-card rounded-2xl p-6 border border-dark-border">
+          <div class="flex items-center gap-3 mb-4">
+            <span class="w-8 h-8 rounded-full bg-purple-500/60 flex items-center justify-center text-sm font-bold text-white">3</span>
+            <h2 class="text-lg font-semibold">AI Assist</h2>
+            <span class="text-[11px] bg-gray-500/20 text-gray-500 px-2 py-0.5 rounded-full">Optional</span>
+          </div>
+
+          <div class="flex items-center gap-3 mb-3 flex-wrap">
+            <button class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] bg-dark-bg border border-dark-border text-gray-400 hover:text-gray-300 hover:border-gray-600 transition-all">
+              ⚡ Custom Optimize
+            </button>
+            <button class="flex items-center gap-1.5 px-5 py-2 bg-amber-500 hover:bg-amber-400 text-dark-bg rounded-lg text-[13px] font-semibold transition-all active:scale-95 shadow-sm shadow-amber-500/25">
+              ✨ One-Click Optimize
+            </button>
+            <button class="flex items-center gap-1.5 px-5 py-2 bg-dark-bg border border-dark-border hover:border-green-500/40 hover:bg-green-500/5 rounded-lg text-[13px] text-gray-300 transition-all active:scale-95">
+              🌐 Translate Only
+            </button>
+          </div>
+
+          <!-- Optimize Result (参照老项目) -->
+          <div class="bg-dark-bg rounded-lg border border-amber-500/20 overflow-hidden mb-3">
+            <div class="px-4 py-2.5 flex items-center gap-2 hover:bg-white/5 transition-colors cursor-pointer">
+              <span class="text-amber-400 text-sm">✨</span>
+              <span class="text-[13px] font-semibold text-amber-400">Optimization Result</span>
+              <span class="text-[13px] text-gray-500 ml-auto">在这个快速变化的时代…</span>
+            </div>
+            <div class="p-4 space-y-3 border-t border-dark-border/50">
+              <div>
+                <span class="text-[13px] text-gray-500 uppercase tracking-wider">Before</span>
+                <div class="text-[13px] text-white/70 bg-dark-card rounded-lg p-3 mt-1 leading-relaxed max-h-32 overflow-y-auto">在这个快速变化的时代，AI 技术正在重新定义内容创作的边界。从文案生成到语音合成，每一项创新都在帮助创作者更高效地表达想法。</div>
+              </div>
+              <div>
+                <span class="text-xs text-amber-400 uppercase tracking-wider">After</span>
+                <div class="text-[13px] text-white/90 bg-dark-card rounded-lg p-3 mt-1 leading-relaxed border-l-2 border-amber-500/40 max-h-32 overflow-y-auto">在这个快速变化的时代，<br>[停顿0.3s]<br>AI 技术正在重新定义内容创作的边界。<br>[停顿0.3s]<br>从文案生成到语音合成，<br>[停顿0.2s]<br>每一项创新都在帮助创作者更高效地表达想法。</div>
+              </div>
+              <div class="flex items-center gap-2 pt-1 flex-wrap">
+                <button class="flex items-center gap-1 px-3 py-1.5 bg-dark-card border border-dark-border rounded-lg text-[13px] text-gray-400 hover:text-gray-200 transition-all">📋 Copy</button>
+                <button class="flex items-center gap-1 px-3 py-1.5 bg-accent-primary/15 text-accent-primary border border-accent-primary/25 rounded-lg text-xs font-medium hover:bg-accent-primary/25 transition-all">↩ Use This</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Translation Result (参照老项目) -->
+          <div class="bg-dark-bg rounded-xl border border-green-500/20 overflow-hidden">
+            <div class="px-4 py-3 flex items-center gap-2 hover:bg-white/5 transition-colors cursor-pointer">
+              <span class="text-green-400 text-sm">🌐</span>
+              <span class="text-[13px] font-semibold text-green-400">Translation Result</span>
+              <span class="text-[13px] text-gray-500">🇺🇸 English</span>
+            </div>
+            <div class="p-4 space-y-3 border-t border-dark-border/50">
+              <div>
+                <span class="text-[13px] text-gray-500 uppercase tracking-wider">Original (zh-CN)</span>
+                <div class="text-[13px] text-white/70 bg-dark-card rounded-lg p-3 mt-1 leading-relaxed">在这个快速变化的时代，AI 技术正在重新定义内容创作的边界。</div>
+              </div>
+              <div>
+                <span class="text-xs text-green-400 uppercase tracking-wider">Translated (English)</span>
+                <div class="text-[13px] text-white/90 bg-dark-card rounded-lg p-3 mt-1 leading-relaxed border-l-2 border-green-500/30">In this era of rapid change, AI technology is redefining the boundaries of content creation.</div>
+              </div>
+              <div class="flex items-center gap-2 pt-1 flex-wrap">
+                <button class="flex items-center gap-1 px-3 py-1.5 bg-dark-card border border-dark-border rounded-lg text-[13px] text-gray-400 hover:text-gray-200 transition-all">📋 Copy</button>
+                <button class="flex items-center gap-1 px-3 py-1.5 bg-green-500/15 text-green-400 border border-green-500/25 rounded-lg text-xs font-medium hover:bg-green-500/25 transition-all">📥 Download TXT</button>
+                <button class="flex items-center gap-1 px-3 py-1.5 bg-accent-primary/15 text-accent-primary border border-accent-primary/25 rounded-lg text-xs font-medium hover:bg-accent-primary/25 transition-all">↩ Use This</button>
+                <button class="flex items-center gap-1 px-3 py-1.5 bg-accent-primary text-white rounded-lg text-xs font-semibold hover:bg-accent-primary/80 transition-all active:scale-95">🎤 Synthesize Directly</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== STEP 4: 生成 & 下载 ===== -->
+        <section class="bg-dark-card rounded-2xl p-6 border border-dark-border">
+          <div class="flex items-center gap-3 mb-4">
+            <span class="w-8 h-8 rounded-full bg-green-500/60 flex items-center justify-center text-sm font-bold text-white">4</span>
+            <h2 class="text-lg font-semibold">Generate & Download</h2>
+          </div>
+
+          <button class="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-accent-primary to-blue-600 rounded-xl text-base font-bold text-white transition-all active:scale-[0.98] shadow-sm shadow-accent-primary/25">
+            🎤 Generate Speech
+          </button>
+
+          <!-- Audio Player (参照老项目) -->
+          <div class="mt-4 bg-dark-bg rounded-xl border border-dark-border p-4">
+            <div class="flex items-center gap-3 mb-3">
+              <span class="text-2xl">🎧</span>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-white/90 truncate">tts_abc123.mp3</p>
+                <p class="text-xs text-gray-500">🇨🇳 中文 · 云希 (zh-CN-YunxiNeural)</p>
+              </div>
+              <button class="w-10 h-10 rounded-full flex items-center justify-center bg-accent-primary text-white">▶</button>
+            </div>
+            <button class="w-full flex items-center justify-center gap-2 py-2.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl text-sm font-semibold hover:bg-green-500/20 transition-colors">
+              📥 Download MP3
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <!-- RIGHT: History sidebar (参照老项目) -->
+      <aside class="lg:w-80 shrink-0 space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="font-semibold text-white">TTS History</h3>
+          <span class="text-xs text-gray-500">Last 20</span>
+        </div>
+
+        <div class="space-y-2">
+          <div class="bg-dark-card border border-dark-border rounded-xl p-3.5 space-y-2.5">
+            <p class="text-[13px] text-white/80 line-clamp-2 leading-relaxed">产品介绍音频 - 英文版 Product introduction voiceover</p>
+            <div class="flex items-center gap-1.5 text-[11px] text-gray-500 flex-wrap">
+              <span>🇺🇸 English</span><span>·</span><span>Jenny</span><span>·</span><span>Jun 26, 14:30</span>
+            </div>
+            <div class="flex items-center gap-1.5 pt-1.5 border-t border-dark-border">
+              <button class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-dark-bg/50 text-gray-400 hover:text-white">📝 Fill</button>
+              <button class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-dark-bg/50 text-gray-400 hover:text-white">▶ Play</button>
+              <button class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-dark-bg/50 text-gray-400 hover:text-green-400">⬇ Download</button>
+            </div>
+          </div>
+
+          <div class="bg-dark-card border border-dark-border rounded-xl p-3.5 space-y-2.5">
+            <p class="text-[13px] text-white/80 line-clamp-2 leading-relaxed">科技前沿资讯播报</p>
+            <div class="flex items-center gap-1.5 text-[11px] text-gray-500 flex-wrap">
+              <span>🇨🇳 中文</span><span>·</span><span>云希</span><span>·</span><span>Jun 26, 10:00</span>
+            </div>
+            <div class="flex items-center gap-1.5 pt-1.5 border-t border-dark-border">
+              <button class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-dark-bg/50 text-gray-400 hover:text-white">📝 Fill</button>
+              <button class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-dark-bg/50 text-gray-400 hover:text-white">▶ Play</button>
+              <button class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-dark-bg/50 text-gray-400 hover:text-green-400">⬇ Download</button>
+            </div>
+          </div>
+
+          <div class="bg-dark-card border border-dark-border rounded-xl p-3.5 space-y-2.5">
+            <p class="text-[13px] text-white/80 line-clamp-2 leading-relaxed">夏日好物分享音频</p>
+            <div class="flex items-center gap-1.5 text-[11px] text-gray-500 flex-wrap">
+              <span>🇨🇳 中文</span><span>·</span><span>晓晓</span><span>·</span><span>Jun 25, 16:00</span>
+            </div>
+            <div class="flex items-center gap-1.5 pt-1.5 border-t border-dark-border">
+              <button class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-dark-bg/50 text-gray-400 hover:text-white">📝 Fill</button>
+              <button class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-dark-bg/50 text-gray-400 hover:text-white">▶ Play</button>
+              <button class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-dark-bg/50 text-gray-400 hover:text-green-400">⬇ Download</button>
+            </div>
+          </div>
+
+          <div class="bg-dark-card border border-dark-border rounded-xl p-3.5 space-y-2.5">
+            <p class="text-[13px] text-white/80 line-clamp-2 leading-relaxed">日语产品介绍 - テスト音声</p>
+            <div class="flex items-center gap-1.5 text-[11px] text-gray-500 flex-wrap">
+              <span>🇯🇵 日本語</span><span>·</span><span>Nanami</span><span>·</span><span>Jun 25, 09:00</span>
+            </div>
+            <div class="flex items-center gap-1.5 pt-1.5 border-t border-dark-border">
+              <button class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-dark-bg/50 text-gray-400 hover:text-white">📝 Fill</button>
+              <button class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-dark-bg/50 text-gray-400 hover:text-white">▶ Play</button>
+              <button class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-dark-bg/50 text-gray-400 hover:text-green-400">⬇ Download</button>
+            </div>
+          </div>
+        </div>
+
+        <button class="w-full text-xs text-accent-primary hover:underline text-center mt-2">View all 42 records →</button>
+      </aside>
+    </div>
+  </div>
+</body>
+</html>

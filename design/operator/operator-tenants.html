@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tenants — Operator Console</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{colors:{'dark-card':'#1a1a2e','dark-bg':'#0f0f1a','dark-border':'#2a2a3e','dark-hover':'#252540','accent-primary':'#6366f1'}}}}</script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{background:#0f0f1a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+  ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#0f0f1a}::-webkit-scrollbar-thumb{background:#2a2a3e;border-radius:3px}
+  .sidebar-transition{transition:transform 0.3s ease}
+  .status-active{background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.2)}
+  .status-suspended{background:rgba(234,179,8,0.1);color:#eab308;border:1px solid rgba(234,179,8,0.2)}
+  .status-banned{background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2)}
+  .plan-free{background:rgba(156,163,175,0.1);color:#9ca3af;border:1px solid rgba(156,163,175,0.2)}
+  .plan-pro{background:rgba(59,130,246,0.1);color:#3b82f6;border:1px solid rgba(59,130,246,0.2)}
+  .plan-enterprise{background:rgba(147,51,234,0.1);color:#a855f7;border:1px solid rgba(147,51,234,0.2)}
+</style>
+</head>
+<body class="min-h-screen bg-dark-bg flex">
+  <!-- ====== Sidebar ====== -->
+  <aside id="sidebar" class="w-64 bg-dark-card border-r border-dark-border flex flex-col shrink-0 sidebar-transition fixed lg:static inset-y-0 left-0 z-30 lg:translate-x-0 -translate-x-full">
+    <div class="h-16 flex items-center gap-3 px-5 border-b border-dark-border">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-accent-primary to-purple-600 flex items-center justify-center">
+        <i data-lucide="shield-check" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <span class="text-sm font-bold bg-gradient-to-r from-accent-primary to-purple-500 bg-clip-text text-transparent">AIOPS</span>
+        <span class="text-[10px] text-gray-500 block -mt-0.5">Operator</span>
+      </div>
+    </div>
+    <nav class="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+      <a href="operator-dashboard.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
+      </a>
+      <a href="operator-tenants.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-accent-primary/10 text-accent-primary transition-colors">
+        <i data-lucide="building-2" class="w-4 h-4"></i> Tenants <span class="ml-auto w-1.5 h-1.5 rounded-full bg-accent-primary"></span>
+      </a>
+      <a href="operator-users.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors">
+        <i data-lucide="users" class="w-4 h-4"></i> Users
+      </a>
+      <a href="operator-apikeys.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors">
+        <i data-lucide="key" class="w-4 h-4"></i> API Keys
+      </a>
+      <div class="pt-3 mt-3 border-t border-dark-border">
+        <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors"><i data-lucide="file-text" class="w-4 h-4"></i> Audit Log</a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors"><i data-lucide="settings" class="w-4 h-4"></i> System Settings</a>
+      </div>
+    </nav>
+    <div class="p-4 border-t border-dark-border">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-accent-primary to-purple-600 flex items-center justify-center text-white text-xs font-bold">SA</div>
+        <div class="flex-1 min-w-0"><p class="text-xs font-medium text-white truncate">Super Admin</p><p class="text-[10px] text-gray-500">admin@aiops.cloud</p></div>
+        <a href="operator-login.html" class="text-gray-600 hover:text-red-400 transition-colors"><i data-lucide="log-out" class="w-4 h-4"></i></a>
+      </div>
+    </div>
+  </aside>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="closeSidebar()"></div>
+
+  <!-- ====== Main Content ====== -->
+  <div class="flex-1 flex flex-col min-w-0">
+    <header class="h-16 border-b border-dark-border bg-dark-bg/80 backdrop-blur sticky top-0 z-10 flex items-center justify-between px-6">
+      <div class="flex items-center gap-3">
+        <button onclick="toggleSidebar()" class="lg:hidden text-gray-400 hover:text-white transition-colors"><i data-lucide="menu" class="w-5 h-5"></i></button>
+        <div class="flex items-center gap-2 text-sm text-gray-500">
+          <span>Operator</span><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i><span class="text-white font-medium">Tenants</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-[10px] text-gray-600 bg-dark-card border border-dark-border px-2.5 py-1 rounded-full flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span> System Online
+        </span>
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-accent-primary to-purple-600 flex items-center justify-center text-white text-xs font-bold">SA</div>
+      </div>
+    </header>
+
+    <main class="flex-1 p-6 overflow-y-auto">
+      <div class="max-w-7xl mx-auto">
+        <!-- Page Header -->
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-2xl font-bold">Tenants</h2>
+            <p class="text-sm text-gray-500 mt-1">Manage all platform tenants</p>
+          </div>
+          <div class="flex items-center gap-2 text-xs text-gray-500">
+            <span class="bg-dark-card border border-dark-border px-2 py-1 rounded-lg">Total: <strong class="text-white">48</strong></span>
+            <span class="bg-dark-card border border-dark-border px-2 py-1 rounded-lg">Active: <strong class="text-green-400">36</strong></span>
+            <span class="bg-dark-card border border-dark-border px-2 py-1 rounded-lg">Suspended: <strong class="text-amber-400">8</strong></span>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-dark-card rounded-xl border border-dark-border p-4 mb-4">
+          <div class="flex flex-col sm:flex-row gap-3">
+            <div class="relative flex-1">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <i data-lucide="search" class="w-4 h-4 text-gray-600"></i>
+              </div>
+              <input type="text" placeholder="Search by name or slug..."
+                class="w-full pl-10 pr-4 py-2.5 bg-dark-bg border border-dark-border rounded-xl text-white text-sm placeholder:text-gray-600 focus:outline-none focus:border-accent-primary/50 transition-all">
+            </div>
+            <select class="bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-accent-primary/50 min-w-[130px]">
+              <option value="">All Plans</option><option value="free">Free</option><option value="pro">Pro</option><option value="enterprise">Enterprise</option>
+            </select>
+            <select class="bg-dark-bg border border-dark-border rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-accent-primary/50 min-w-[130px]">
+              <option value="">All Status</option><option value="active">Active</option><option value="suspended">Suspended</option><option value="banned">Banned</option>
+            </select>
+            <button class="flex items-center gap-2 px-4 py-2.5 bg-dark-bg border border-dark-border rounded-xl text-sm text-gray-400 hover:text-white transition-colors">
+              <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-dark-card rounded-xl border border-dark-border overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-dark-border text-left">
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Tenant Name</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Slug</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Plan</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Members</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">API Calls</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                  <th class="px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-dark-border">
+                <!-- Row 1 -->
+                <tr class="hover:bg-dark-hover/50 transition-colors">
+                  <td class="px-5 py-4"><p class="text-sm font-medium text-white">CloudTech Solutions</p></td>
+                  <td class="px-5 py-4"><span class="text-xs font-mono text-gray-400 bg-dark-bg px-2 py-1 rounded">cloudtech</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium plan-enterprise px-2.5 py-1 rounded-full">Enterprise</span></td>
+                  <td class="px-5 py-4"><span class="text-sm text-gray-300">24</span></td>
+                  <td class="px-5 py-4"><span class="text-sm font-mono text-gray-300">2,431</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium status-active px-2.5 py-1 rounded-full">Active</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">Jun 12, 2026</span></td>
+                  <td class="px-5 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-dark-hover transition-colors" title="View Details"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-amber-400 hover:bg-amber-400/10 transition-colors" title="Suspend"><i data-lucide="pause-circle" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-accent-primary hover:bg-accent-primary/10 transition-colors" title="Change Plan"><i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Ban"><i data-lucide="ban" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 2 -->
+                <tr class="hover:bg-dark-hover/50 transition-colors">
+                  <td class="px-5 py-4"><p class="text-sm font-medium text-white">DataStream AI</p></td>
+                  <td class="px-5 py-4"><span class="text-xs font-mono text-gray-400 bg-dark-bg px-2 py-1 rounded">datastream</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium plan-pro px-2.5 py-1 rounded-full">Pro</span></td>
+                  <td class="px-5 py-4"><span class="text-sm text-gray-300">18</span></td>
+                  <td class="px-5 py-4"><span class="text-sm font-mono text-gray-300">1,892</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium status-active px-2.5 py-1 rounded-full">Active</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">Jun 14, 2026</span></td>
+                  <td class="px-5 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-dark-hover transition-colors" title="View Details"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-amber-400 hover:bg-amber-400/10 transition-colors" title="Suspend"><i data-lucide="pause-circle" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-accent-primary hover:bg-accent-primary/10 transition-colors" title="Change Plan"><i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Ban"><i data-lucide="ban" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 3 - Suspended -->
+                <tr class="hover:bg-dark-hover/50 transition-colors bg-amber-400/5">
+                  <td class="px-5 py-4"><p class="text-sm font-medium text-white">ByteForge</p></td>
+                  <td class="px-5 py-4"><span class="text-xs font-mono text-gray-400 bg-dark-bg px-2 py-1 rounded">byteforge</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium plan-pro px-2.5 py-1 rounded-full">Pro</span></td>
+                  <td class="px-5 py-4"><span class="text-sm text-gray-300">5</span></td>
+                  <td class="px-5 py-4"><span class="text-sm font-mono text-gray-300">720</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium status-suspended px-2.5 py-1 rounded-full">Suspended</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">Jun 18, 2026</span></td>
+                  <td class="px-5 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-dark-hover transition-colors" title="View Details"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-green-400 hover:bg-green-400/10 transition-colors" title="Reactivate"><i data-lucide="play-circle" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-accent-primary hover:bg-accent-primary/10 transition-colors" title="Change Plan"><i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Ban"><i data-lucide="ban" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 4 -->
+                <tr class="hover:bg-dark-hover/50 transition-colors">
+                  <td class="px-5 py-4"><p class="text-sm font-medium text-white">TechNova Labs</p></td>
+                  <td class="px-5 py-4"><span class="text-xs font-mono text-gray-400 bg-dark-bg px-2 py-1 rounded">technova</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium plan-enterprise px-2.5 py-1 rounded-full">Enterprise</span></td>
+                  <td class="px-5 py-4"><span class="text-sm text-gray-300">32</span></td>
+                  <td class="px-5 py-4"><span class="text-sm font-mono text-gray-300">1,745</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium status-active px-2.5 py-1 rounded-full">Active</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">Jun 19, 2026</span></td>
+                  <td class="px-5 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-dark-hover transition-colors" title="View Details"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-amber-400 hover:bg-amber-400/10 transition-colors" title="Suspend"><i data-lucide="pause-circle" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-accent-primary hover:bg-accent-primary/10 transition-colors" title="Change Plan"><i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Ban"><i data-lucide="ban" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 5 -->
+                <tr class="hover:bg-dark-hover/50 transition-colors">
+                  <td class="px-5 py-4"><p class="text-sm font-medium text-white">Pulse Analytics</p></td>
+                  <td class="px-5 py-4"><span class="text-xs font-mono text-gray-400 bg-dark-bg px-2 py-1 rounded">pulse</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium plan-pro px-2.5 py-1 rounded-full">Pro</span></td>
+                  <td class="px-5 py-4"><span class="text-sm text-gray-300">11</span></td>
+                  <td class="px-5 py-4"><span class="text-sm font-mono text-gray-300">1,420</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium status-active px-2.5 py-1 rounded-full">Active</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">Jun 20, 2026</span></td>
+                  <td class="px-5 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-dark-hover transition-colors" title="View Details"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-amber-400 hover:bg-amber-400/10 transition-colors" title="Suspend"><i data-lucide="pause-circle" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-accent-primary hover:bg-accent-primary/10 transition-colors" title="Change Plan"><i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Ban"><i data-lucide="ban" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Row 6 - Banned -->
+                <tr class="hover:bg-dark-hover/50 transition-colors bg-red-500/5">
+                  <td class="px-5 py-4"><p class="text-sm font-medium text-white/70">SpamBot Inc</p></td>
+                  <td class="px-5 py-4"><span class="text-xs font-mono text-gray-400 bg-dark-bg px-2 py-1 rounded">spambot</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium plan-free px-2.5 py-1 rounded-full">Free</span></td>
+                  <td class="px-5 py-4"><span class="text-sm text-gray-500">2</span></td>
+                  <td class="px-5 py-4"><span class="text-sm font-mono text-gray-500">12</span></td>
+                  <td class="px-5 py-4"><span class="text-[11px] font-medium status-banned px-2.5 py-1 rounded-full">Banned</span></td>
+                  <td class="px-5 py-4"><span class="text-xs text-gray-500">Jun 22, 2026</span></td>
+                  <td class="px-5 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-dark-hover transition-colors" title="View Details"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-green-400 hover:bg-green-400/10 transition-colors" title="Unban"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i></button>
+                      <button class="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <div class="px-5 py-3 border-t border-dark-border flex items-center justify-between">
+            <span class="text-xs text-gray-500">Showing 1-6 of 48 tenants</span>
+            <div class="flex gap-1">
+              <button class="px-2.5 py-1.5 rounded-lg text-xs text-gray-500 border border-dark-border hover:bg-dark-hover transition-colors disabled:opacity-30" disabled>← Prev</button>
+              <button class="px-2.5 py-1.5 rounded-lg text-xs bg-accent-primary text-white font-medium">1</button>
+              <button class="px-2.5 py-1.5 rounded-lg text-xs text-gray-400 hover:bg-dark-hover transition-colors">2</button>
+              <button class="px-2.5 py-1.5 rounded-lg text-xs text-gray-400 hover:bg-dark-hover transition-colors">3</button>
+              <span class="px-2.5 py-1.5 text-xs text-gray-600">...</span>
+              <button class="px-2.5 py-1.5 rounded-lg text-xs text-gray-400 hover:bg-dark-hover transition-colors">8</button>
+              <button class="px-2.5 py-1.5 rounded-lg text-xs text-gray-400 border border-dark-border hover:bg-dark-hover transition-colors">Next →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    lucide.createIcons();
+    function toggleSidebar(){document.getElementById('sidebar').classList.toggle('-translate-x-full');document.getElementById('sidebar-overlay').classList.toggle('hidden');}
+    function closeSidebar(){document.getElementById('sidebar').classList.add('-translate-x-full');document.getElementById('sidebar-overlay').classList.add('hidden');}
+  </script>
+</body>
+</html>

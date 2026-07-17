@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Keys — Operator Console</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{colors:{'dark-card':'#1a1a2e','dark-bg':'#0f0f1a','dark-border':'#2a2a3e','dark-hover':'#252540','accent-primary':'#6366f1'}}}}</script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body{background:#0f0f1a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+  ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#0f0f1a}::-webkit-scrollbar-thumb{background:#2a2a3e;border-radius:3px}
+  .sidebar-transition{transition:transform 0.3s ease}
+  .key-masked{font-family:'SF Mono', 'Fira Code', 'Cascadia Code', monospace;letter-spacing:0.05em}
+</style>
+</head>
+<body class="min-h-screen bg-dark-bg flex">
+  <!-- ====== Sidebar ====== -->
+  <aside id="sidebar" class="w-64 bg-dark-card border-r border-dark-border flex flex-col shrink-0 sidebar-transition fixed lg:static inset-y-0 left-0 z-30 lg:translate-x-0 -translate-x-full">
+    <div class="h-16 flex items-center gap-3 px-5 border-b border-dark-border">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-accent-primary to-purple-600 flex items-center justify-center">
+        <i data-lucide="shield-check" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <span class="text-sm font-bold bg-gradient-to-r from-accent-primary to-purple-500 bg-clip-text text-transparent">AIOPS</span>
+        <span class="text-[10px] text-gray-500 block -mt-0.5">Operator</span>
+      </div>
+    </div>
+    <nav class="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+      <a href="operator-dashboard.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
+      </a>
+      <a href="operator-tenants.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors">
+        <i data-lucide="building-2" class="w-4 h-4"></i> Tenants
+      </a>
+      <a href="operator-users.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors">
+        <i data-lucide="users" class="w-4 h-4"></i> Users
+      </a>
+      <a href="operator-apikeys.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-accent-primary/10 text-accent-primary transition-colors">
+        <i data-lucide="key" class="w-4 h-4"></i> API Keys <span class="ml-auto w-1.5 h-1.5 rounded-full bg-accent-primary"></span>
+      </a>
+      <div class="pt-3 mt-3 border-t border-dark-border">
+        <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors"><i data-lucide="file-text" class="w-4 h-4"></i> Audit Log</a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-dark-hover transition-colors"><i data-lucide="settings" class="w-4 h-4"></i> System Settings</a>
+      </div>
+    </nav>
+    <div class="p-4 border-t border-dark-border">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-accent-primary to-purple-600 flex items-center justify-center text-white text-xs font-bold">SA</div>
+        <div class="flex-1 min-w-0"><p class="text-xs font-medium text-white truncate">Super Admin</p><p class="text-[10px] text-gray-500">admin@aiops.cloud</p></div>
+        <a href="operator-login.html" class="text-gray-600 hover:text-red-400 transition-colors"><i data-lucide="log-out" class="w-4 h-4"></i></a>
+      </div>
+    </div>
+  </aside>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden" onclick="closeSidebar()"></div>
+
+  <!-- ====== Main Content ====== -->
+  <div class="flex-1 flex flex-col min-w-0">
+    <header class="h-16 border-b border-dark-border bg-dark-bg/80 backdrop-blur sticky top-0 z-10 flex items-center justify-between px-6">
+      <div class="flex items-center gap-3">
+        <button onclick="toggleSidebar()" class="lg:hidden text-gray-400 hover:text-white transition-colors"><i data-lucide="menu" class="w-5 h-5"></i></button>
+        <div class="flex items-center gap-2 text-sm text-gray-500">
+          <span>Operator</span><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i><span class="text-white font-medium">API Keys</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-[10px] text-gray-600 bg-dark-card border border-dark-border px-2.5 py-1 rounded-full flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span> System Online
+        </span>
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-accent-primary to-purple-600 flex items-center justify-center text-white text-xs font-bold">SA</div>
+      </div>
+    </header>
+
+    <main class="flex-1 p-6 overflow-y-auto">
+      <div class="max-w-4xl mx-auto">
+        <!-- Page Header -->
+        <div class="mb-6">
+          <h2 class="text-2xl font-bold">API Key Management</h2>
+          <p class="text-sm text-gray-500 mt-1">Manage provider API keys for AI services</p>
+        </div>
+
+        <!-- Status Banner -->
+        <div class="bg-dark-card rounded-xl border border-dark-border p-4 mb-6">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                <span class="text-sm text-gray-300">All providers operational</span>
+              </div>
+              <span class="text-xs text-gray-600 border-l border-dark-border pl-4">Last checked: 2 min ago</span>
+            </div>
+            <button class="flex items-center gap-2 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-xs text-gray-400 hover:text-white transition-colors">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Check All
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-6">
+          <!-- DeepSeek API Key Card -->
+          <div class="bg-dark-card rounded-xl border border-dark-border overflow-hidden">
+            <div class="px-5 py-4 border-b border-dark-border flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                  <i data-lucide="brain" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                  <h3 class="font-semibold">DeepSeek API</h3>
+                  <p class="text-xs text-gray-500">AI text generation & reasoning</p>
+                </div>
+              </div>
+              <span class="flex items-center gap-1.5 text-xs text-green-400 bg-green-400/10 px-2.5 py-1 rounded-full">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span> Active
+              </span>
+            </div>
+
+            <div class="p-5 space-y-4">
+              <!-- Current Key Display -->
+              <div class="bg-dark-bg rounded-xl border border-dark-border p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs text-gray-500 uppercase tracking-wider">Current Key</span>
+                  <span class="text-[10px] text-gray-600">Key ID: dskey_prod_001</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div class="flex-1 flex items-center gap-2 bg-dark-card rounded-lg px-4 py-3 border border-dark-border">
+                    <i data-lucide="key" class="w-4 h-4 text-gray-600"></i>
+                    <span class="text-sm key-masked text-gray-400">sk-4a7b••••••••••••••••x9e2</span>
+                    <button onclick="copyToClipboard('sk-4a7b...x9e2')" class="ml-auto text-gray-600 hover:text-accent-primary transition-colors" title="Copy">
+                      <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button onclick="document.getElementById('ds-modal').classList.remove('hidden')" class="flex items-center gap-1.5 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-xs text-gray-400 hover:text-white hover:border-accent-primary/50 transition-all">
+                      <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Replace
+                    </button>
+                    <button class="flex items-center gap-1.5 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-xs text-gray-400 hover:text-green-400 hover:border-green-400/30 transition-all">
+                      <i data-lucide="zap" class="w-3.5 h-3.5"></i> Test
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Key Stats -->
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="bg-dark-bg rounded-lg p-3 text-center">
+                  <p class="text-lg font-bold text-white">892K</p>
+                  <p class="text-[10px] text-gray-500">Calls This Month</p>
+                </div>
+                <div class="bg-dark-bg rounded-lg p-3 text-center">
+                  <p class="text-lg font-bold text-green-400">99.7%</p>
+                  <p class="text-[10px] text-gray-500">Success Rate</p>
+                </div>
+                <div class="bg-dark-bg rounded-lg p-3 text-center">
+                  <p class="text-lg font-bold text-white">$142</p>
+                  <p class="text-[10px] text-gray-500">Est. Cost MTD</p>
+                </div>
+                <div class="bg-dark-bg rounded-lg p-3 text-center">
+                  <p class="text-lg font-bold text-amber-400">3</p>
+                  <p class="text-[10px] text-gray-500">Errors (24h)</p>
+                </div>
+              </div>
+
+              <!-- Key History -->
+              <div>
+                <h4 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Key History</h4>
+                <div class="space-y-1.5">
+                  <div class="flex items-center gap-3 text-xs bg-dark-bg rounded-lg px-3 py-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                    <span key-masked text-gray-400 flex-1">sk-4a7b••••x9e2</span>
+                    <span class="text-gray-600">Added Jun 20, 2026</span>
+                    <span class="text-green-400">Active</span>
+                  </div>
+                  <div class="flex items-center gap-3 text-xs bg-dark-bg rounded-lg px-3 py-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-gray-600"></span>
+                    <span class="key-masked text-gray-500 flex-1">sk-8c3d••••f1a5</span>
+                    <span class="text-gray-600">Added May 15, 2026</span>
+                    <span class="text-gray-500">Revoked</span>
+                  </div>
+                  <div class="flex items-center gap-3 text-xs bg-dark-bg rounded-lg px-3 py-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-gray-600"></span>
+                    <span class="key-masked text-gray-500 flex-1">sk-2f9e••••b6c7</span>
+                    <span class="text-gray-600">Added Apr 02, 2026</span>
+                    <span class="text-gray-500">Revoked</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ARK API Key Card -->
+          <div class="bg-dark-card rounded-xl border border-dark-border overflow-hidden">
+            <div class="px-5 py-4 border-b border-dark-border flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                  <i data-lucide="image" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                  <h3 class="font-semibold">ARK API (Seedream)</h3>
+                  <p class="text-xs text-gray-500">AI image generation</p>
+                </div>
+              </div>
+              <span class="flex items-center gap-1.5 text-xs text-green-400 bg-green-400/10 px-2.5 py-1 rounded-full">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span> Active
+              </span>
+            </div>
+
+            <div class="p-5 space-y-4">
+              <!-- Current Key Display -->
+              <div class="bg-dark-bg rounded-xl border border-dark-border p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs text-gray-500 uppercase tracking-wider">Current Key</span>
+                  <span class="text-[10px] text-gray-600">Key ID: ark_prod_001</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div class="flex-1 flex items-center gap-2 bg-dark-card rounded-lg px-4 py-3 border border-dark-border">
+                    <i data-lucide="key" class="w-4 h-4 text-gray-600"></i>
+                    <span class="text-sm key-masked text-gray-400">ark-••••••••••••••••7m3k</span>
+                    <button onclick="copyToClipboard('ark-...7m3k')" class="ml-auto text-gray-600 hover:text-accent-primary transition-colors" title="Copy">
+                      <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button onclick="document.getElementById('ark-modal').classList.remove('hidden')" class="flex items-center gap-1.5 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-xs text-gray-400 hover:text-white hover:border-accent-primary/50 transition-all">
+                      <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Replace
+                    </button>
+                    <button class="flex items-center gap-1.5 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-xs text-gray-400 hover:text-green-400 hover:border-green-400/30 transition-all">
+                      <i data-lucide="zap" class="w-3.5 h-3.5"></i> Test
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Key Stats -->
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="bg-dark-bg rounded-lg p-3 text-center">
+                  <p class="text-lg font-bold text-white">342</p>
+                  <p class="text-[10px] text-gray-500">Images Gen. This Month</p>
+                </div>
+                <div class="bg-dark-bg rounded-lg p-3 text-center">
+                  <p class="text-lg font-bold text-green-400">98.2%</p>
+                  <p class="text-[10px] text-gray-500">Success Rate</p>
+                </div>
+                <div class="bg-dark-bg rounded-lg p-3 text-center">
+                  <p class="text-lg font-bold text-white">$28</p>
+                  <p class="text-[10px] text-gray-500">Est. Cost MTD</p>
+                </div>
+                <div class="bg-dark-bg rounded-lg p-3 text-center">
+                  <p class="text-lg font-bold text-green-400">0</p>
+                  <p class="text-[10px] text-gray-500">Errors (24h)</p>
+                </div>
+              </div>
+
+              <!-- Key History (shorter) -->
+              <div>
+                <h4 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Key History</h4>
+                <div class="space-y-1.5">
+                  <div class="flex items-center gap-3 text-xs bg-dark-bg rounded-lg px-3 py-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                    <span class="key-masked text-gray-400 flex-1">ark-••••7m3k</span>
+                    <span class="text-gray-600">Added Jun 18, 2026</span>
+                    <span class="text-green-400">Active</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Balance Check -->
+          <div class="bg-dark-card rounded-xl border border-dark-border p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="font-semibold flex items-center gap-2"><i data-lucide="wallet" class="w-4 h-4 text-accent-primary"></i> Provider Balance</h3>
+                <p class="text-xs text-gray-500 mt-1">Check remaining credit across all providers</p>
+              </div>
+              <button class="flex items-center gap-2 px-4 py-2.5 bg-accent-primary/10 text-accent-primary border border-accent-primary/25 rounded-xl text-sm font-medium hover:bg-accent-primary/20 transition-colors">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Check Balance
+              </button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              <div class="bg-dark-bg rounded-lg p-3 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded bg-blue-500/20 flex items-center justify-center"><i data-lucide="brain" class="w-4 h-4 text-blue-400"></i></div>
+                  <div><p class="text-sm font-medium text-white">DeepSeek</p><p class="text-[10px] text-gray-500">Balance</p></div>
+                </div>
+                <span class="text-sm font-bold text-green-400">$3,240.50</span>
+              </div>
+              <div class="bg-dark-bg rounded-lg p-3 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded bg-purple-500/20 flex items-center justify-center"><i data-lucide="image" class="w-4 h-4 text-purple-400"></i></div>
+                  <div><p class="text-sm font-medium text-white">ARK Seedream</p><p class="text-[10px] text-gray-500">Balance</p></div>
+                </div>
+                <span class="text-sm font-bold text-green-400">$892.00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- DeepSeek Replace Key Modal -->
+  <div id="ds-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-dark-card rounded-2xl border border-dark-border w-full max-w-md shadow-2xl">
+      <div class="px-5 py-4 border-b border-dark-border flex items-center justify-between">
+        <h3 class="font-semibold">Replace DeepSeek API Key</h3>
+        <button onclick="document.getElementById('ds-modal').classList.add('hidden')" class="text-gray-600 hover:text-white transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-400 mb-1.5">New API Key</label>
+          <input type="password" placeholder="sk-..."
+            class="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-xl text-white text-sm placeholder:text-gray-600 focus:outline-none focus:border-accent-primary/50 transition-all">
+          <p class="text-[10px] text-gray-600 mt-1.5">⚠️ The old key will be revoked immediately upon replacement.</p>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button onclick="document.getElementById('ds-modal').classList.add('hidden')" class="px-4 py-2.5 border border-dark-border rounded-xl text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+          <button class="px-4 py-2.5 bg-accent-primary rounded-xl text-sm font-medium text-white hover:bg-accent-primary/80 transition-colors">Save & Activate</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARK Replace Key Modal -->
+  <div id="ark-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-dark-card rounded-2xl border border-dark-border w-full max-w-md shadow-2xl">
+      <div class="px-5 py-4 border-b border-dark-border flex items-center justify-between">
+        <h3 class="font-semibold">Replace ARK API Key</h3>
+        <button onclick="document.getElementById('ark-modal').classList.add('hidden')" class="text-gray-600 hover:text-white transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-400 mb-1.5">New API Key</label>
+          <input type="password" placeholder="ark-..."
+            class="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-xl text-white text-sm placeholder:text-gray-600 focus:outline-none focus:border-accent-primary/50 transition-all">
+          <p class="text-[10px] text-gray-600 mt-1.5">⚠️ The old key will be revoked immediately upon replacement.</p>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button onclick="document.getElementById('ark-modal').classList.add('hidden')" class="px-4 py-2.5 border border-dark-border rounded-xl text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+          <button class="px-4 py-2.5 bg-accent-primary rounded-xl text-sm font-medium text-white hover:bg-accent-primary/80 transition-colors">Save & Activate</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+    function toggleSidebar(){document.getElementById('sidebar').classList.toggle('-translate-x-full');document.getElementById('sidebar-overlay').classList.toggle('hidden');}
+    function closeSidebar(){document.getElementById('sidebar').classList.add('-translate-x-full');document.getElementById('sidebar-overlay').classList.add('hidden');}
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        // Brief visual feedback could be added
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+*.log
+/tmp/
+server/tts-cache/
+server/data/
+.env
+.env.bak
