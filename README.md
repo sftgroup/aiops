@@ -6,13 +6,13 @@ AIOps 是一站式 AI 内容运营平台，提供**文案生成、语音合成 (
 
 | 资源 | 地址 |
 |------|------|
-| **正式生产** | http://43.156.25.197:5290 |
+| **正式生产 (新)** | http://43.156.99.215:5290 |
+| **正式生产 (旧)** | http://43.156.25.197:5290 |
 | **备用/预发布** | http://43.133.37.108:5290 |
-| **旧环境（迁移中）** | http://43.156.50.6:5290 |
 | **API 根路径** | `http://<server>:5290/api` |
 | **健康检查** | `GET /api/health` |
 | **GitHub 仓库** | https://github.com/sftgroup/aiops |
-| 测试账号 | `sdk_test@aiops.test` / `Test1234!` |
+| 管理员账号 | `admin@aiops.dev` / `Admin1234` |
 
 ## 项目结构
 
@@ -55,7 +55,7 @@ import { AIOpsClient } from "@aiops/sdk";
 
 const client = new AIOpsClient({
   apiKey: "aiopsk_xxx",
-  baseUrl: "http://43.156.50.6:5290",
+  baseUrl: "http://43.156.99.215:5290",
 });
 
 // 查询配额
@@ -81,7 +81,7 @@ const content = await client.content.generate({ topic: "AI trends", platform: "t
       "command": "node",
       "args": ["/path/to/aiops/mcp-server/dist/index.js"],
       "env": {
-        "AIOPS_BASE_URL": "http://43.156.50.6:5290",
+        "AIOPS_BASE_URL": "http://43.156.99.215:5290",
         "AIOPS_API_KEY": "aiopsk_xxx"
       }
     }
@@ -251,12 +251,11 @@ const content = await client.content.generate({ topic: "AI trends", platform: "t
 
 | 环境 | 地址 | 状态 |
 |------|------|------|
-| **正式生产** | `43.156.25.197:5290` | 🟢 运行中 |
+| **正式生产 (新)** | `43.156.99.215:5290` | 🟢 运行中 |
+| **正式生产 (旧)** | `43.156.25.197:5290` | 🟢 运行中 |
 | **备用/预发布** | `43.133.37.108:5290` | 🟢 运行中 |
-| **旧环境** | `43.156.50.6:5290` | 🟡 迁移中 |
 | 数据库 | PostgreSQL 16 | 🟢 |
-| 缓存 | Redis 7 | 🟢 |
-| 代理 | Nginx (可选) | 🟢 |
+| 缓存 | Redis 7（可选） | 🟢 |
 
 详见 [DEPLOYMENT.md](DEPLOYMENT.md)
 

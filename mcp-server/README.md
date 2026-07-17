@@ -17,7 +17,7 @@
 
 | 变量名 | 必需 | 说明 |
 |--------|------|------|
-| `AIOPS_BASE_URL` | ✅ | AIOps API 地址，例 `http://43.156.50.6:5290` |
+| `AIOPS_BASE_URL` | ✅ | AIOps API 地址，例 `http://43.156.99.215:5290` |
 | `AIOPS_API_KEY` | ✅ | AIOps API Key（格式 `aiopsk_xxx`） |
 
 ## 在 Cursor 中配置
@@ -31,7 +31,7 @@
       "command": "node",
       "args": ["/path/to/aiops/mcp-server/dist/index.js"],
       "env": {
-        "AIOPS_BASE_URL": "http://43.156.50.6:5290",
+        "AIOPS_BASE_URL": "http://43.156.99.215:5290",
         "AIOPS_API_KEY": "aiopsk_xxxxxxxxxxxx"
       }
     }
@@ -50,7 +50,7 @@
       "command": "node",
       "args": ["/path/to/aiops/mcp-server/dist/index.js"],
       "env": {
-        "AIOPS_BASE_URL": "http://43.156.50.6:5290",
+        "AIOPS_BASE_URL": "http://43.156.99.215:5290",
         "AIOPS_API_KEY": "aiopsk_xxxxxxxxxxxx"
       }
     }
@@ -67,7 +67,7 @@
   "command": "node",
   "args": ["/path/to/aiops/mcp-server/dist/index.js"],
   "env": {
-    "AIOPS_BASE_URL": "http://43.156.50.6:5290",
+    "AIOPS_BASE_URL": "http://43.156.99.215:5290",
     "AIOPS_API_KEY": "aiopsk_xxxxxxxxxxxx"
   }
 }
@@ -200,7 +200,7 @@ npm run build
 npx tsx tests/mcp.test.ts
 
 # 运行集成测试（需要真实 API 服务）
-AIOPS_BASE_URL=http://43.156.50.6:5290 AIOPS_API_KEY=aiopsk_xxx node tests/mcp-real-test.mjs
+AIOPS_BASE_URL=http://43.156.99.215:5290 AIOPS_API_KEY=aiopsk_xxx node tests/mcp-real-test.mjs
 
 # 本地调试
 AIOPS_BASE_URL=http://localhost:5290 AIOPS_API_KEY=aiopsk_xxx npx tsx src/index.ts

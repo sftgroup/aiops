@@ -17,7 +17,7 @@ import { AIOpsClient } from "@aiops/sdk";
 
 const client = new AIOpsClient({
   apiKey: "aiopsk_xxxxxxxxxxxx",
-  baseUrl: "http://43.156.50.6:5290",
+  baseUrl: "http://43.156.99.215:5290",
 });
 
 // 查询 TTS 语音列表 — 14 种语言
@@ -35,7 +35,7 @@ console.log(quota.quotas.content.remaining); // 5000
 ```typescript
 const client = new AIOpsClient({
   token: "eyJhbGciOi...",
-  baseUrl: "http://43.156.50.6:5290",
+  baseUrl: "http://43.156.99.215:5290",
 });
 ```
 
@@ -260,7 +260,7 @@ try {
 | 测试套件 | 测试数 | 结果 |
 |----------|--------|------|
 | 单元测试 (tsx tests/sdk.test.ts) | 56 | ✅ 0 失败 |
-| 集成测试 (full-test.mjs vs 43.156.50.6:5290) | 41 | ✅ 0 失败 |
+| 集成测试 (full-test.mjs vs 43.156.99.215:5290) | 41 | ✅ 0 失败 |
 
 ---
 
